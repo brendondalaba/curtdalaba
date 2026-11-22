@@ -49,20 +49,28 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     return jsonError("Upload couldn't be finished. Try again.", 502);
   }
 
-  const { error } = await locals.supabase.from("sermons").insert({
-    id: params.id,
-    title,
-    scripture: scripture || null,
-    preached_on: preachedOn,
-    audio_content_type: object.httpMetadata?.contentType ?? "audio/mpeg",
-    audio_size_bytes: object.size,
-    duration_seconds:
-      typeof duration === "number" && Number.isFinite(duration)
-        ? Math.round(duration)
-        : null,
-    created_by: locals.user?.id ?? null,
-  });
-  if (error) {
+  try {
+    await env.DB.prepare(
+      `insert into sermons (id, title, scripture, preached_on, audio_content_type,
+         audio_size_bytes, duration_seconds, created_by)
+       values (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        params.id,
+        title,
+        scripture || null,
+        preachedOn,
+        object.httpMetadata?.contentType ?? "audio/mpeg",
+        object.size,
+        typeof duration === "number" &&
+          Number.isFinite(duration) &&
+          duration >= 0
+          ? Math.round(duration)
+          : null,
+        locals.user?.id ?? null
+      )
+      .run();
+  } catch (error) {
     console.error("Insert sermon failed", error);
     await env.SERMONS_BUCKET.delete(key);
     return jsonError("Couldn't save the sermon. Try again.", 500);

@@ -23,11 +23,15 @@ Astro + Tailwind CSS v4 + TypeScript, scaffolded from bd-style.
   GitHub `brendondalaba/curtdalaba` (`main`). Setup steps are in `README.md`.
 - Bindings and env come from `import { env } from "cloudflare:workers"` (not `Astro.locals.runtime`,
   removed in Astro 6). Run `npm run typegen` after editing `wrangler.jsonc`.
-- Auth: Supabase via `@supabase/ssr` cookies, checked in `src/middleware.ts`. Public paths are listed
-  there; anything new is private by default. Secret-key client (`createSupabaseAdminClient`) is only
-  for sign-up and member management.
+- Auth is our own, on D1: PBKDF2 passwords (`src/lib/password.ts`) and hashed-token session cookies
+  (`src/lib/session.ts`), checked in `src/middleware.ts`. Public paths are listed there; anything new
+  is private by default. Admin-only routes must check `locals.isAdmin` themselves (no RLS in D1).
+- No email: forgotten passwords use one-time reset links an admin makes on the Admin page.
+- Workers Free allows ~10 ms CPU per request and one password hash costs ~4 ms: sign-in uses one,
+  changing a password two. Never add more to a single request.
 - Audio lives in R2 at `sermons/<sermon id>` and is only served by `src/pages/api/audio/[id].ts`.
   Never add a public bucket URL or put audio in `public/`.
-- Schema changes: add a new file in `supabase/migrations/` and update `src/lib/database.types.ts`.
+- Data: D1 binding `DB` (database `curtdalaba`). Schema changes: add a numbered file in `migrations/`,
+  update `src/lib/db.ts`, apply with `npx wrangler d1 migrations apply curtdalaba --remote`.
 - On this machine the project sits on OneDrive (`/mnt/c`), which makes `astro dev`/`preview` slow to
   start; `npx wrangler dev -c dist/server/wrangler.json` after a build is a quicker local check.

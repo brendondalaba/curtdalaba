@@ -19,6 +19,15 @@
       "bucket_name": "curtdalaba-sermons"
     }
   ],
+  // Members, sessions, sermons and progress. Schema: migrations/ (applied with
+  // `npx wrangler d1 migrations apply curtdalaba --remote`).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "curtdalaba",
+      "database_id": "60aaea84-037f-4cd7-853c-1e5f551a7b44"
+    }
+  ],
   // Slows down guessing passwords and the access code: 10 attempts per minute per IP.
   "ratelimits": [
     {
@@ -29,11 +38,5 @@
         "period": 60
       }
     }
-  ],
-  // Public values (safe to commit). The secret key is set with
-  // `npx wrangler secret put SUPABASE_SECRET_KEY` and locally in .dev.vars.
-  "vars": {
-    "SUPABASE_URL": "https://YOUR-PROJECT-REF.supabase.co",
-    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YOUR_KEY"
-  }
+  ]
 }

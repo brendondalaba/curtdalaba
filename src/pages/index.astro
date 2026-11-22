@@ -1,33 +1,42 @@
 ---
+import { env } from "cloudflare:workers";
 import Alert from "@/components/Alert.astro";
 import Player from "@/components/Player.astro";
 import AppLayout from "@/layouts/AppLayout.astro";
+import type { ProgressRow, SermonListItem } from "@/lib/db";
 import { formatDuration, formatSermonDate } from "@/lib/format";
 import { inputClass, labelClass } from "@/lib/ui";
 
-const { supabase, user, isAdmin } = Astro.locals;
+const { user, isAdmin } = Astro.locals;
 
-const [{ data: sermons, error }, { data: progressRows }] = await Promise.all([
-  supabase
-    .from("sermons")
-    .select("id, title, scripture, preached_on, duration_seconds")
-    .order("preached_on", { ascending: false })
-    .order("created_at", { ascending: false }),
-  supabase
-    .from("playback_progress")
-    .select("sermon_id, position_seconds, completed")
-    .eq("user_id", user?.id ?? ""),
-]);
+let sermons: SermonListItem[] = [];
+let progressRows: ProgressRow[] = [];
+let error = false;
+try {
+  const [sermonResult, progressResult] = await env.DB.batch([
+    env.DB.prepare(
+      `select id, title, scripture, preached_on, duration_seconds from sermons
+        order by preached_on desc, created_at desc`
+    ),
+    env.DB.prepare(
+      `select sermon_id, position_seconds, completed from playback_progress
+        where user_id = ?`
+    ).bind(user?.id ?? ""),
+  ]);
+  sermons = (sermonResult?.results ?? []) as SermonListItem[];
+  progressRows = (progressResult?.results ?? []) as ProgressRow[];
+} catch (caught) {
+  console.error("Couldn't load sermons", caught);
+  error = true;
+}
 
-const progress = new Map(
-  (progressRows ?? []).map(row => [row.sermon_id, row])
-);
+const progress = new Map(progressRows.map(row => [row.sermon_id, row]));
 
-const list = (sermons ?? []).map(sermon => {
+const list = sermons.map(sermon => {
   const saved = progress.get(sermon.id);
   const duration = sermon.duration_seconds ?? 0;
   const position = saved?.position_seconds ?? 0;
-  const completed = saved?.completed ?? false;
+  const completed = saved?.completed === 1;
   const date = formatSermonDate(sermon.preached_on);
   const fraction = completed
     ? 1

@@ -2,8 +2,7 @@
 
 declare namespace App {
   interface Locals {
-    supabase: import("@/lib/supabase").SupabaseServerClient;
-    user: { id: string; email: string } | null;
+    user: import("@/lib/session").SessionUser | null;
     isAdmin: boolean;
   }
 }

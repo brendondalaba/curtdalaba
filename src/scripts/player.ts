@@ -11,7 +11,8 @@ type Track = {
 };
 
 const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2];
-const SAVE_EVERY_MS = 15_000;
+/** Also saved on pause, end and leaving the page; 30s keeps D1 writes low. */
+const SAVE_EVERY_MS = 30_000;
 const BACK_SECONDS = 15;
 const FORWARD_SECONDS = 30;
 /** Starting within this many seconds of the end restarts from the top. */

@@ -1,4 +1,5 @@
 ---
+import { env } from "cloudflare:workers";
 import Alert from "@/components/Alert.astro";
 import FormField from "@/components/FormField.astro";
 import InstallApp from "@/components/InstallApp.astro";
@@ -6,37 +7,53 @@ import PasswordToggle from "@/components/PasswordToggle.astro";
 import SubmitButton from "@/components/SubmitButton.astro";
 import ThemeToggle from "@/components/ThemeToggle.astro";
 import AppLayout from "@/layouts/AppLayout.astro";
-import { formPassword, MIN_PASSWORD_LENGTH } from "@/lib/auth";
+import {
+  formPassword,
+  isWithinAuthRateLimit,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/password";
+import { endOtherSessions } from "@/lib/session";
 import { buttonSecondary, cardClass } from "@/lib/ui";
 
-const { supabase, user } = Astro.locals;
+const { user } = Astro.locals;
 let passwordError: string | null = null;
 let passwordSaved = false;
 
-if (Astro.request.method === "POST") {
-  const form = await Astro.request.formData();
+async function changePassword(form: FormData) {
+  if (!user) return "Sign in again.";
+  const current = formPassword(form, "current-password");
   const password = formPassword(form, "new-password");
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    passwordError = `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
-  } else {
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) {
-      passwordError =
-        error.code === "same_password"
-          ? "That's your current password. Choose a new one."
-          : "We couldn't update your password. Try again.";
-    } else {
-      passwordSaved = true;
-    }
+  if (!(await isWithinAuthRateLimit(Astro.request, "password"))) {
+    return "Too many attempts. Wait a minute and try again.";
   }
-  if (passwordError) Astro.response.status = 400;
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (password === current) {
+    return "That's your current password. Choose a new one.";
+  }
+  const row = await env.DB.prepare(
+    "select password_hash from users where id = ?"
+  )
+    .bind(user.id)
+    .first<{ password_hash: string }>();
+  const { valid } = await verifyPassword(current, row?.password_hash ?? null);
+  if (!valid) return "Your current password isn't right.";
+
+  await env.DB.prepare("update users set password_hash = ? where id = ?")
+    .bind(await hashPassword(password), user.id)
+    .run();
+  // Keep this device signed in; sign out every other one.
+  await endOtherSessions(user.id, Astro.cookies);
+  return null;
 }
 
-const { data: profile } = await supabase
-  .from("profiles")
-  .select("full_name, email")
-  .eq("id", user?.id ?? "")
-  .maybeSingle();
+if (Astro.request.method === "POST") {
+  passwordError = await changePassword(await Astro.request.formData());
+  if (passwordError) Astro.response.status = 400;
+  else passwordSaved = true;
+}
 ---
 
 <AppLayout title="Account">
@@ -45,8 +62,8 @@ const { data: profile } = await supabase
   <div class="mt-8 flex flex-col gap-6">
     <section class={cardClass} aria-labelledby="profile-heading">
       <h2 id="profile-heading" class="font-medium text-lg">Signed in as</h2>
-      {profile?.full_name && <p class="mt-2">{profile.full_name}</p>}
-      <p class="text-muted-foreground">{profile?.email ?? user?.email}</p>
+      {user?.fullName && <p class="mt-2">{user.fullName}</p>}
+      <p class="text-muted-foreground">{user?.email}</p>
       <form method="post" action="/logout" class="mt-4">
         <button type="submit" class={buttonSecondary}>Sign out</button>
       </form>
@@ -75,6 +92,16 @@ const { data: profile } = await supabase
           hidden
           readonly
         />
+        <div class="flex flex-col gap-2">
+          <FormField
+            label="Current password"
+            name="current-password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+          <PasswordToggle for="current-password" />
+        </div>
         <div class="flex flex-col gap-2">
           <FormField
             label="New password"

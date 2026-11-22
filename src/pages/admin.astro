@@ -4,9 +4,10 @@ import Alert from "@/components/Alert.astro";
 import UploadSermon from "@/components/UploadSermon.astro";
 import AppLayout from "@/layouts/AppLayout.astro";
 import { formString, normalizeAccessCode } from "@/lib/auth";
+import { type Member, nowIso, type SermonListItem } from "@/lib/db";
 import { formatDuration, formatSermonDate } from "@/lib/format";
 import { isIsoDate, isUuid, sermonAudioKey } from "@/lib/sermons";
-import { createSupabaseAdminClient } from "@/lib/supabase";
+import { createPasswordReset, endOtherSessions } from "@/lib/session";
 import {
   buttonDanger,
   buttonPrimary,
@@ -16,8 +17,9 @@ import {
   labelClass,
 } from "@/lib/ui";
 
-const { supabase, user, isAdmin } = Astro.locals;
+const { user, isAdmin } = Astro.locals;
 if (!isAdmin) return Astro.redirect("/");
+const db = env.DB;
 
 const NOTICES: Record<string, string> = {
   uploaded: "Sermon uploaded.",
@@ -29,8 +31,12 @@ const NOTICES: Record<string, string> = {
 };
 
 let error: string | null = null;
+/** Shown once, right after an admin makes it; never put in a URL or stored. */
+let resetLink = null as { email: string; url: string } | null;
 
-async function handle(form: FormData): Promise<string> {
+class AdminError extends Error {}
+
+async function handle(form: FormData): Promise<string | null> {
   const intent = formString(form, "intent");
   const id = formString(form, "id");
 
@@ -38,21 +44,22 @@ async function handle(form: FormData): Promise<string> {
     const title = formString(form, "title");
     const scripture = formString(form, "scripture");
     const preachedOn = formString(form, "preached_on");
-    if (!isUuid(id)) throw new Error("Unknown sermon.");
-    if (!title) throw new Error("Add a title.");
-    if (!isIsoDate(preachedOn)) throw new Error("Add the date preached.");
-    const { error } = await supabase
-      .from("sermons")
-      .update({ title, scripture: scripture || null, preached_on: preachedOn })
-      .eq("id", id);
-    if (error) throw new Error("Couldn't save the sermon.");
+    if (!isUuid(id)) throw new AdminError("Unknown sermon.");
+    if (!title || title.length > 200) throw new AdminError("Add a title.");
+    if (scripture.length > 200) throw new AdminError("Scripture is too long.");
+    if (!isIsoDate(preachedOn)) throw new AdminError("Add the date preached.");
+    await db
+      .prepare(
+        "update sermons set title = ?, scripture = ?, preached_on = ? where id = ?"
+      )
+      .bind(title, scripture || null, preachedOn, id)
+      .run();
     return "saved";
   }
 
   if (intent === "delete-sermon") {
-    if (!isUuid(id)) throw new Error("Unknown sermon.");
-    const { error } = await supabase.from("sermons").delete().eq("id", id);
-    if (error) throw new Error("Couldn't delete the sermon.");
+    if (!isUuid(id)) throw new AdminError("Unknown sermon.");
+    await db.prepare("delete from sermons where id = ?").bind(id).run();
     await env.SERMONS_BUCKET.delete(sermonAudioKey(id));
     return "deleted";
   }
@@ -60,63 +67,88 @@ async function handle(form: FormData): Promise<string> {
   if (intent === "access-code") {
     const code = normalizeAccessCode(formString(form, "access_code"));
     if (code.length < 6 || code.length > 64) {
-      throw new Error("Use 6 to 64 letters or numbers.");
+      throw new AdminError("Use 6 to 64 letters or numbers.");
     }
-    const { error } = await supabase
-      .from("app_settings")
-      .update({ access_code: code, updated_at: new Date().toISOString() })
-      .eq("id", 1);
-    if (error) throw new Error("Couldn't change the access code.");
+    await db
+      .prepare(
+        "update app_settings set access_code = ?, updated_at = ? where id = 1"
+      )
+      .bind(code, nowIso())
+      .run();
     return "code";
   }
 
+  if (!isUuid(id)) throw new AdminError("Unknown member.");
+  if (id === user?.id) {
+    throw new AdminError(
+      "You can't change your own account here. Use the Account page."
+    );
+  }
+
   if (intent === "set-admin") {
-    if (!isUuid(id)) throw new Error("Unknown member.");
-    if (id === user?.id) throw new Error("You can't change your own role.");
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_admin: formString(form, "value") === "true" })
-      .eq("id", id);
-    if (error) throw new Error("Couldn't update the member.");
+    await db
+      .prepare("update users set is_admin = ? where id = ?")
+      .bind(formString(form, "value") === "true" ? 1 : 0, id)
+      .run();
     return "admin";
   }
 
   if (intent === "remove-member") {
-    if (!isUuid(id)) throw new Error("Unknown member.");
-    if (id === user?.id) throw new Error("You can't remove yourself.");
-    const { error } =
-      await createSupabaseAdminClient().auth.admin.deleteUser(id);
-    if (error) throw new Error("Couldn't remove the member.");
+    // Their sessions, reset links and progress go with them (on delete cascade).
+    await db.prepare("delete from users where id = ?").bind(id).run();
     return "removed";
   }
 
-  throw new Error("Unknown action.");
+  if (intent === "reset-link") {
+    const member = await db
+      .prepare("select email from users where id = ?")
+      .bind(id)
+      .first<{ email: string }>();
+    if (!member) throw new AdminError("Unknown member.");
+    const token = await createPasswordReset(id);
+    // A forgotten password often means a lost or shared device: sign them out.
+    await endOtherSessions(id);
+    const url = new URL("/reset-password", Astro.url);
+    url.searchParams.set("token", token);
+    resetLink = { email: member.email, url: url.toString() };
+    return null;
+  }
+
+  throw new AdminError("Unknown action.");
 }
 
 if (Astro.request.method === "POST") {
   try {
     const notice = await handle(await Astro.request.formData());
-    return Astro.redirect(`/admin?notice=${notice}`, 303);
+    if (notice) return Astro.redirect(`/admin?notice=${notice}`, 303);
   } catch (caught) {
-    error = caught instanceof Error ? caught.message : "Something went wrong.";
+    if (!(caught instanceof AdminError)) console.error(caught);
+    error =
+      caught instanceof AdminError
+        ? caught.message
+        : "Something went wrong. Try again.";
     Astro.response.status = 400;
   }
 }
 
 const notice = NOTICES[Astro.url.searchParams.get("notice") ?? ""] ?? null;
 
-const [{ data: sermons }, { data: members }, { data: settings }] =
-  await Promise.all([
-    supabase
-      .from("sermons")
-      .select("id, title, scripture, preached_on, duration_seconds")
-      .order("preached_on", { ascending: false }),
-    supabase
-      .from("profiles")
-      .select("id, email, full_name, is_admin, created_at")
-      .order("created_at", { ascending: true }),
-    supabase.from("app_settings").select("access_code").eq("id", 1).single(),
-  ]);
+const [sermonResult, memberResult, settingsResult] = await db.batch([
+  db.prepare(
+    `select id, title, scripture, preached_on, duration_seconds from sermons
+      order by preached_on desc, created_at desc`
+  ),
+  db.prepare(
+    `select id, email, full_name, is_admin, created_at from users
+      order by created_at`
+  ),
+  db.prepare("select access_code from app_settings where id = 1"),
+]);
+const sermons = (sermonResult?.results ?? []) as SermonListItem[];
+const members = (memberResult?.results ?? []) as Member[];
+const settings = settingsResult?.results?.[0] as
+  | { access_code: string }
+  | undefined;
 
 const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 ---
@@ -130,6 +162,44 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
         <Alert message={error} />
         <Alert tone="success" message={notice} />
       </div>
+    )
+  }
+
+  {
+    resetLink && (
+      <section
+        class={`${cardClass} mt-6 border-primary`}
+        aria-labelledby="reset-heading"
+      >
+        <h2 id="reset-heading" class="font-medium text-lg">
+          Reset link for {resetLink.email}
+        </h2>
+        <p class="mt-2 text-muted-foreground leading-7">
+          Send this to them by text or email. It works once, for 3 days, and
+          won't be shown again.
+        </p>
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row">
+          <label for="reset-url" class="sr-only">
+            Reset link
+          </label>
+          <input
+            id="reset-url"
+            type="text"
+            readonly
+            value={resetLink.url}
+            autocomplete="off"
+            spellcheck="false"
+            class={`${inputClass} flex-1 font-mono text-sm`}
+          />
+          <button
+            type="button"
+            class={buttonPrimary}
+            data-copy-target="reset-url"
+          >
+            Copy link
+          </button>
+        </div>
+      </section>
     )
   }
 
@@ -289,7 +359,7 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
               <div class="min-w-0">
                 <p class="font-medium">
                   {member.full_name ?? member.email}
-                  {member.is_admin && (
+                  {member.is_admin === 1 && (
                     <span class="ml-2 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground text-xs">
                       Admin
                     </span>
@@ -301,20 +371,29 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
                 </p>
               </div>
               {member.id !== user?.id && (
-                <form method="post" class="flex shrink-0 gap-2">
+                <form method="post" class="flex shrink-0 flex-wrap gap-2">
                   <input type="hidden" name="id" value={member.id} />
                   <input
                     type="hidden"
                     name="value"
-                    value={String(!member.is_admin)}
+                    value={String(member.is_admin !== 1)}
                   />
+                  <button
+                    type="submit"
+                    name="intent"
+                    value="reset-link"
+                    data-confirm={`Make a password reset link for ${member.email}? They'll be signed out on their devices until they use it.`}
+                    class={`${buttonSecondary} h-9 text-sm`}
+                  >
+                    Reset link
+                  </button>
                   <button
                     type="submit"
                     name="intent"
                     value="set-admin"
                     class={`${buttonSecondary} h-9 text-sm`}
                   >
-                    {member.is_admin ? "Remove admin" : "Make admin"}
+                    {member.is_admin === 1 ? "Remove admin" : "Make admin"}
                   </button>
                   <button
                     type="submit"
@@ -345,4 +424,22 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
       event.preventDefault();
     }
   });
+
+  // Copy the one-time reset link.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "[data-copy-target]"
+  )) {
+    const input = document.getElementById(button.dataset.copyTarget ?? "");
+    if (!(input instanceof HTMLInputElement)) continue;
+    input.addEventListener("focus", () => input.select());
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(input.value);
+        button.textContent = "Copied";
+      } catch {
+        input.focus();
+        button.textContent = "Select and copy";
+      }
+    });
+  }
 </script>

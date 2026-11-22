@@ -1,4 +1,5 @@
 ---
+import { env } from "cloudflare:workers";
 import Alert from "@/components/Alert.astro";
 import FormField from "@/components/FormField.astro";
 import PasswordToggle from "@/components/PasswordToggle.astro";
@@ -11,7 +12,9 @@ import {
   isWithinAuthRateLimit,
   MIN_PASSWORD_LENGTH,
 } from "@/lib/auth";
-import { createSupabaseAdminClient } from "@/lib/supabase";
+import { isUniqueViolation } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
+import { startSession } from "@/lib/session";
 
 let error: string | null = null;
 let fullName = "";
@@ -34,44 +37,41 @@ async function createAccount(form: FormData) {
     return `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data: settings, error: settingsError } = await admin
-    .from("app_settings")
-    .select("access_code")
-    .eq("id", 1)
-    .single();
-  if (settingsError || !settings) {
-    console.error("Couldn't read access code", settingsError);
+  if (email.length > 254 || !email.includes("@")) {
+    return "Enter a valid email.";
+  }
+  if (fullName.length > 100) return "Use a shorter name.";
+
+  const settings = await env.DB.prepare(
+    "select access_code from app_settings where id = 1"
+  ).first<{ access_code: string }>();
+  if (!settings) {
+    console.error("Access code is missing from app_settings");
     return "Something went wrong on our end. Try again in a moment.";
   }
   if (!(await accessCodesMatch(accessCode, settings.access_code))) {
     return "That access code isn't right. Check with the person who shared it.";
   }
 
-  // access_granted is what the database trigger checks (see the migration).
-  const { error: createError } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { full_name: fullName },
-    app_metadata: { access_granted: true },
-  });
-  if (createError) {
-    if (createError.code === "email_exists") {
+  const id = crypto.randomUUID();
+  try {
+    // The very first account becomes the admin, so the site can be set up
+    // without touching the database.
+    await env.DB.prepare(
+      `insert into users (id, email, full_name, password_hash, is_admin)
+       values (?, ?, ?, ?, (select count(*) = 0 from users))`
+    )
+      .bind(id, email, fullName, await hashPassword(password))
+      .run();
+  } catch (caught) {
+    if (isUniqueViolation(caught)) {
       return "An account with that email already exists. Sign in instead.";
     }
-    if (createError.code === "weak_password") {
-      return "Choose a stronger password.";
-    }
-    console.error("Couldn't create user", createError);
-    return "We couldn't create your account. Check your email and try again.";
+    console.error("Couldn't create user", caught);
+    return "We couldn't create your account. Try again in a moment.";
   }
 
-  const { error: signInError } =
-    await Astro.locals.supabase.auth.signInWithPassword({ email, password });
-  if (signInError) {
-    return "Your account is ready. Sign in to continue.";
-  }
+  await startSession(Astro.cookies, Astro.url, id);
   return null;
 }
 

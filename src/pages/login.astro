@@ -1,4 +1,5 @@
 ---
+import { env } from "cloudflare:workers";
 import Alert from "@/components/Alert.astro";
 import FormField from "@/components/FormField.astro";
 import PasswordToggle from "@/components/PasswordToggle.astro";
@@ -10,12 +11,11 @@ import {
   isWithinAuthRateLimit,
   safeRedirectPath,
 } from "@/lib/auth";
+import { hashPassword, verifyPassword } from "@/lib/password";
+import { deleteExpired, startSession } from "@/lib/session";
 
 const next = safeRedirectPath(Astro.url.searchParams.get("next"));
-let error: string | null =
-  Astro.url.searchParams.get("link") === "expired"
-    ? "That link has expired or was already used. Request a new one."
-    : null;
+let error: string | null = null;
 let email = "";
 
 if (Astro.request.method === "POST") {
@@ -28,13 +28,27 @@ if (Astro.request.method === "POST") {
   } else if (!email || !password) {
     error = "Enter your email and password.";
   } else {
-    const { error: signInError } =
-      await Astro.locals.supabase.auth.signInWithPassword({ email, password });
-    if (signInError) {
-      error = "That email and password don't match an account.";
-    } else {
+    const user = await env.DB.prepare(
+      "select id, password_hash from users where email = ?"
+    )
+      .bind(email)
+      .first<{ id: string; password_hash: string }>();
+    // Checked even when no account matched, so timing doesn't reveal emails.
+    const { valid, outdated } = await verifyPassword(
+      password,
+      user?.password_hash ?? null
+    );
+    if (user && valid) {
+      if (outdated) {
+        await env.DB.prepare("update users set password_hash = ? where id = ?")
+          .bind(await hashPassword(password), user.id)
+          .run();
+      }
+      await startSession(Astro.cookies, Astro.url, user.id);
+      await deleteExpired();
       return Astro.redirect(next, 303);
     }
+    error = "That email and password don't match an account.";
   }
   Astro.response.status = 400;
 }

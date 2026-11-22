@@ -1,4 +1,6 @@
+import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
+import { nowIso } from "@/lib/db";
 import { isUuid } from "@/lib/sermons";
 
 /** Saves where the member stopped. Sent by the player (also via sendBeacon). */
@@ -27,14 +29,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return Response.json({ error: "Invalid progress" }, { status: 400 });
   }
 
-  const { error } = await locals.supabase.from("playback_progress").upsert({
-    user_id: user.id,
-    sermon_id: sermonId,
-    position_seconds: position,
-    completed: completed === true,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) {
+  try {
+    await env.DB.prepare(
+      `insert into playback_progress (user_id, sermon_id, position_seconds, completed, updated_at)
+       values (?, ?, ?, ?, ?)
+       on conflict (user_id, sermon_id) do update set
+         position_seconds = excluded.position_seconds,
+         completed = excluded.completed,
+         updated_at = excluded.updated_at`
+    )
+      .bind(user.id, sermonId, position, completed === true ? 1 : 0, nowIso())
+      .run();
+  } catch {
     // Usually a sermon that was deleted mid-listen.
     return Response.json({ error: "Couldn't save progress" }, { status: 400 });
   }
