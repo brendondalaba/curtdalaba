@@ -41,15 +41,28 @@ export const GET: APIRoute = async ({ params, request }) => {
     const size = object.size;
     let start: number;
     let end: number;
-    if ("suffix" in range) {
-      start = Math.max(0, size - range.suffix);
+    // R2 can return every key with some undefined (e.g. "bytes=0-" comes back
+    // with suffix: undefined), so check values, not which keys exist.
+    const { offset, length, suffix } = range as {
+      offset?: number;
+      length?: number;
+      suffix?: number;
+    };
+    if (suffix !== undefined) {
+      start = Math.max(0, size - suffix);
       end = size - 1;
     } else {
-      start = range.offset ?? 0;
+      start = offset ?? 0;
       end =
-        range.length === undefined
+        length === undefined
           ? size - 1
-          : Math.min(size - 1, start + range.length - 1);
+          : Math.min(size - 1, start + length - 1);
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+      return new Response("Range not satisfiable", {
+        status: 416,
+        headers: { "Content-Range": `bytes */${size}` },
+      });
     }
     headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
     headers.set("Content-Length", String(end - start + 1));
