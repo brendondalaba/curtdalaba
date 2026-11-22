@@ -1,0 +1,348 @@
+---
+import { env } from "cloudflare:workers";
+import Alert from "@/components/Alert.astro";
+import UploadSermon from "@/components/UploadSermon.astro";
+import AppLayout from "@/layouts/AppLayout.astro";
+import { formString, normalizeAccessCode } from "@/lib/auth";
+import { formatDuration, formatSermonDate } from "@/lib/format";
+import { isIsoDate, isUuid, sermonAudioKey } from "@/lib/sermons";
+import { createSupabaseAdminClient } from "@/lib/supabase";
+import {
+  buttonDanger,
+  buttonPrimary,
+  buttonSecondary,
+  cardClass,
+  inputClass,
+  labelClass,
+} from "@/lib/ui";
+
+const { supabase, user, isAdmin } = Astro.locals;
+if (!isAdmin) return Astro.redirect("/");
+
+const NOTICES: Record<string, string> = {
+  uploaded: "Sermon uploaded.",
+  saved: "Sermon updated.",
+  deleted: "Sermon deleted.",
+  code: "Access code changed. Existing members aren't affected.",
+  admin: "Member updated.",
+  removed: "Member removed.",
+};
+
+let error: string | null = null;
+
+async function handle(form: FormData): Promise<string> {
+  const intent = formString(form, "intent");
+  const id = formString(form, "id");
+
+  if (intent === "update-sermon") {
+    const title = formString(form, "title");
+    const scripture = formString(form, "scripture");
+    const preachedOn = formString(form, "preached_on");
+    if (!isUuid(id)) throw new Error("Unknown sermon.");
+    if (!title) throw new Error("Add a title.");
+    if (!isIsoDate(preachedOn)) throw new Error("Add the date preached.");
+    const { error } = await supabase
+      .from("sermons")
+      .update({ title, scripture: scripture || null, preached_on: preachedOn })
+      .eq("id", id);
+    if (error) throw new Error("Couldn't save the sermon.");
+    return "saved";
+  }
+
+  if (intent === "delete-sermon") {
+    if (!isUuid(id)) throw new Error("Unknown sermon.");
+    const { error } = await supabase.from("sermons").delete().eq("id", id);
+    if (error) throw new Error("Couldn't delete the sermon.");
+    await env.SERMONS_BUCKET.delete(sermonAudioKey(id));
+    return "deleted";
+  }
+
+  if (intent === "access-code") {
+    const code = normalizeAccessCode(formString(form, "access_code"));
+    if (code.length < 6 || code.length > 64) {
+      throw new Error("Use 6 to 64 letters or numbers.");
+    }
+    const { error } = await supabase
+      .from("app_settings")
+      .update({ access_code: code, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+    if (error) throw new Error("Couldn't change the access code.");
+    return "code";
+  }
+
+  if (intent === "set-admin") {
+    if (!isUuid(id)) throw new Error("Unknown member.");
+    if (id === user?.id) throw new Error("You can't change your own role.");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_admin: formString(form, "value") === "true" })
+      .eq("id", id);
+    if (error) throw new Error("Couldn't update the member.");
+    return "admin";
+  }
+
+  if (intent === "remove-member") {
+    if (!isUuid(id)) throw new Error("Unknown member.");
+    if (id === user?.id) throw new Error("You can't remove yourself.");
+    const { error } =
+      await createSupabaseAdminClient().auth.admin.deleteUser(id);
+    if (error) throw new Error("Couldn't remove the member.");
+    return "removed";
+  }
+
+  throw new Error("Unknown action.");
+}
+
+if (Astro.request.method === "POST") {
+  try {
+    const notice = await handle(await Astro.request.formData());
+    return Astro.redirect(`/admin?notice=${notice}`, 303);
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : "Something went wrong.";
+    Astro.response.status = 400;
+  }
+}
+
+const notice = NOTICES[Astro.url.searchParams.get("notice") ?? ""] ?? null;
+
+const [{ data: sermons }, { data: members }, { data: settings }] =
+  await Promise.all([
+    supabase
+      .from("sermons")
+      .select("id, title, scripture, preached_on, duration_seconds")
+      .order("preached_on", { ascending: false }),
+    supabase
+      .from("profiles")
+      .select("id, email, full_name, is_admin, created_at")
+      .order("created_at", { ascending: true }),
+    supabase.from("app_settings").select("access_code").eq("id", 1).single(),
+  ]);
+
+const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
+---
+
+<AppLayout title="Admin">
+  <h1 class="font-semibold text-3xl tracking-tight">Admin</h1>
+
+  {
+    (error || notice) && (
+      <div class="mt-6 flex flex-col gap-3">
+        <Alert message={error} />
+        <Alert tone="success" message={notice} />
+      </div>
+    )
+  }
+
+  <div class="mt-8 flex flex-col gap-6">
+    <section class={cardClass} aria-labelledby="upload-heading">
+      <h2 id="upload-heading" class="font-medium text-lg">Upload a sermon</h2>
+      <UploadSermon />
+    </section>
+
+    <section class={cardClass} aria-labelledby="code-heading">
+      <h2 id="code-heading" class="font-medium text-lg">Access code</h2>
+      <p class="mt-2 text-muted-foreground leading-7">
+        New members enter this once when they create an account. Changing it
+        doesn't sign anyone out.
+      </p>
+      <p class="mt-4">
+        Current code:
+        <span
+          class="rounded-md bg-muted px-2 py-1 font-medium font-mono tracking-wider"
+          >{settings?.access_code ?? "—"}</span
+        >
+      </p>
+      <form
+        method="post"
+        class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+      >
+        <input type="hidden" name="intent" value="access-code" />
+        <div class="flex flex-1 flex-col gap-2">
+          <label for="access-code" class={labelClass}>New code</label>
+          <input
+            id="access-code"
+            name="access_code"
+            type="text"
+            minlength="6"
+            maxlength="64"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            required
+            class={inputClass}
+          />
+        </div>
+        <button type="submit" class={buttonPrimary}>Change code</button>
+      </form>
+    </section>
+
+    <section class={cardClass} aria-labelledby="sermons-heading">
+      <h2 id="sermons-heading" class="font-medium text-lg">
+        Sermons ({sermons?.length ?? 0})
+      </h2>
+      <ul class="mt-4 flex flex-col divide-y">
+        {
+          (sermons ?? []).map(sermon => (
+            <li class="py-3">
+              <details class="group">
+                <summary class="flex cursor-pointer list-none items-start justify-between gap-4 rounded-md">
+                  <span class="min-w-0">
+                    <span class="block font-medium">{sermon.title}</span>
+                    <span class="block text-muted-foreground text-sm">
+                      {[
+                        sermon.scripture,
+                        formatSermonDate(sermon.preached_on),
+                        sermon.duration_seconds
+                          ? formatDuration(sermon.duration_seconds)
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  </span>
+                  <span class="shrink-0 font-medium text-primary text-sm group-open:hidden">
+                    Edit
+                  </span>
+                  <span class="hidden shrink-0 font-medium text-primary text-sm group-open:inline">
+                    Close
+                  </span>
+                </summary>
+                <form method="post" class="mt-4 grid gap-3 sm:grid-cols-2">
+                  <input type="hidden" name="id" value={sermon.id} />
+                  <div class="flex flex-col gap-2 sm:col-span-2">
+                    <label for={`title-${sermon.id}`} class={labelClass}>
+                      Title
+                    </label>
+                    <input
+                      id={`title-${sermon.id}`}
+                      name="title"
+                      value={sermon.title}
+                      maxlength="200"
+                      autocomplete="off"
+                      required
+                      class={inputClass}
+                    />
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <label for={`scripture-${sermon.id}`} class={labelClass}>
+                      Scripture (optional)
+                    </label>
+                    <input
+                      id={`scripture-${sermon.id}`}
+                      name="scripture"
+                      value={sermon.scripture ?? ""}
+                      maxlength="200"
+                      autocomplete="off"
+                      class={inputClass}
+                    />
+                  </div>
+                  <div class="flex flex-col gap-2">
+                    <label for={`date-${sermon.id}`} class={labelClass}>
+                      Date preached
+                    </label>
+                    <input
+                      id={`date-${sermon.id}`}
+                      name="preached_on"
+                      type="date"
+                      value={sermon.preached_on}
+                      autocomplete="off"
+                      required
+                      class={inputClass}
+                    />
+                  </div>
+                  <div class="flex flex-wrap gap-3 sm:col-span-2">
+                    <button
+                      type="submit"
+                      name="intent"
+                      value="update-sermon"
+                      class={buttonPrimary}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="submit"
+                      name="intent"
+                      value="delete-sermon"
+                      formnovalidate
+                      data-confirm={`Delete "${sermon.title}"? The recording is removed for everyone.`}
+                      class={buttonDanger}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </form>
+              </details>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class={cardClass} aria-labelledby="members-heading">
+      <h2 id="members-heading" class="font-medium text-lg">
+        Members ({members?.length ?? 0})
+      </h2>
+      <ul class="mt-4 flex flex-col divide-y">
+        {
+          (members ?? []).map(member => (
+            <li class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <p class="font-medium">
+                  {member.full_name ?? member.email}
+                  {member.is_admin && (
+                    <span class="ml-2 rounded-full bg-accent px-2 py-0.5 font-medium text-accent-foreground text-xs">
+                      Admin
+                    </span>
+                  )}
+                </p>
+                <p class="truncate text-muted-foreground text-sm">
+                  {member.email} · joined{" "}
+                  {joined.format(new Date(member.created_at))}
+                </p>
+              </div>
+              {member.id !== user?.id && (
+                <form method="post" class="flex shrink-0 gap-2">
+                  <input type="hidden" name="id" value={member.id} />
+                  <input
+                    type="hidden"
+                    name="value"
+                    value={String(!member.is_admin)}
+                  />
+                  <button
+                    type="submit"
+                    name="intent"
+                    value="set-admin"
+                    class={`${buttonSecondary} h-9 text-sm`}
+                  >
+                    {member.is_admin ? "Remove admin" : "Make admin"}
+                  </button>
+                  <button
+                    type="submit"
+                    name="intent"
+                    value="remove-member"
+                    data-confirm={`Remove ${member.email}? They'll need the access code to sign up again.`}
+                    class={`${buttonDanger} h-9 text-sm`}
+                  >
+                    Remove
+                  </button>
+                </form>
+              )}
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </div>
+</AppLayout>
+
+<script>
+  // Ask before destructive actions.
+  document.addEventListener("click", event => {
+    const button = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-confirm]"
+    );
+    if (button && !window.confirm(button.dataset.confirm ?? "Are you sure?")) {
+      event.preventDefault();
+    }
+  });
+</script>

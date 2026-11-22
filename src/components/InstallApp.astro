@@ -1,0 +1,126 @@
+---
+import { buttonPrimary } from "@/lib/ui";
+---
+
+<div data-install class="flex flex-col gap-3">
+  <p class="text-muted-foreground leading-7" data-install-intro>
+    Add this site to your home screen to open it like an app.
+  </p>
+  <div>
+    <button type="button" id="install-app" hidden class={buttonPrimary}>
+      Install app
+    </button>
+  </div>
+  <p id="install-status" role="status" class="text-sm empty:hidden"></p>
+
+  <ol
+    data-install-ios
+    hidden
+    class="list-decimal space-y-1 pl-5 text-muted-foreground leading-7"
+  >
+    <li>
+      Tap the <span class="font-medium text-foreground">Share</span> button in
+      Safari's toolbar.
+    </li>
+    <li>
+      Choose <span class="font-medium text-foreground">Add to Home Screen</span
+      >.
+    </li>
+    <li>Tap <span class="font-medium text-foreground">Add</span>.</li>
+  </ol>
+  <p data-install-other hidden class="text-muted-foreground leading-7">
+    In your browser's menu, look for <span class="font-medium text-foreground"
+      >Install app</span
+    > or <span class="font-medium text-foreground">Add to Home screen</span>.
+  </p>
+  <p data-install-done hidden class="text-muted-foreground leading-7">
+    You're using the installed app.
+  </p>
+</div>
+
+<script>
+  type InstallPromptEvent = Event & {
+    prompt: () => Promise<void>;
+    userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+  };
+  type NavigatorWithInstall = Navigator & {
+    install?: () => Promise<unknown>;
+    standalone?: boolean;
+  };
+
+  const nav = navigator as NavigatorWithInstall;
+  const root = document.querySelector<HTMLElement>("[data-install]");
+  const installButton =
+    document.querySelector<HTMLButtonElement>("#install-app");
+  const installStatus = document.querySelector<HTMLElement>("#install-status");
+
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    nav.standalone === true;
+  const isIos =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const supportsWebInstall = typeof nav.install === "function";
+  let deferredPrompt: InstallPromptEvent | null = null;
+
+  function show(selector: string) {
+    const element = root?.querySelector<HTMLElement>(selector);
+    if (element) element.hidden = false;
+  }
+
+  if (root && installButton && installStatus) {
+    if (isStandalone) {
+      root.querySelector<HTMLElement>("[data-install-intro]")?.remove();
+      show("[data-install-done]");
+    } else if (supportsWebInstall) {
+      installButton.hidden = false;
+    } else if (isIos) {
+      show("[data-install-ios]");
+    } else {
+      show("[data-install-other]");
+    }
+
+    window.addEventListener("beforeinstallprompt", event => {
+      event.preventDefault();
+      deferredPrompt = event as InstallPromptEvent;
+      if (!supportsWebInstall) {
+        installButton.hidden = false;
+        root
+          .querySelector<HTMLElement>("[data-install-other]")
+          ?.setAttribute("hidden", "");
+      }
+    });
+
+    installButton.addEventListener("click", async () => {
+      if (installButton.getAttribute("aria-disabled") === "true") return;
+      installButton.setAttribute("aria-disabled", "true");
+      installStatus.textContent = "";
+      try {
+        if (supportsWebInstall && nav.install) {
+          await nav.install();
+          installStatus.textContent = "Installed. Look for it on your home screen.";
+        } else if (deferredPrompt) {
+          const prompt = deferredPrompt;
+          deferredPrompt = null; // Single use.
+          await prompt.prompt();
+          const { outcome } = await prompt.userChoice;
+          if (outcome === "accepted") {
+            installStatus.textContent =
+              "Installed. Look for it on your home screen.";
+          }
+          installButton.hidden = true;
+        }
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          installStatus.textContent = "Couldn't install. Try your browser's menu.";
+        }
+      } finally {
+        installButton.removeAttribute("aria-disabled");
+      }
+    });
+
+    window.addEventListener("appinstalled", () => {
+      installButton.hidden = true;
+    });
+  }
+</script>

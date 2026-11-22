@@ -1,0 +1,9 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "tailwindcss";
+@import "./tokens.css";
+
+:root {
+  --bd-font-sans: "Inter Variable";
+  --bd-font-mono: "JetBrains Mono Variable";
+}

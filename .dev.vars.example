@@ -1,0 +1,3 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+# Supabase dashboard → Project Settings → API Keys → Secret keys.
+SUPABASE_SECRET_KEY=sb_secret_YOUR_KEY

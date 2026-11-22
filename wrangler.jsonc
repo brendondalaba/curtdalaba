@@ -1,0 +1,39 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "curtdalaba",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  // Private bucket: no public access, no r2.dev URL. Audio is only served by
+  // /api/audio/[id] after the login check in src/middleware.ts.
+  "r2_buckets": [
+    {
+      "binding": "SERMONS_BUCKET",
+      "bucket_name": "curtdalaba-sermons"
+    }
+  ],
+  // Slows down guessing passwords and the access code: 10 attempts per minute per IP.
+  "ratelimits": [
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 10,
+        "period": 60
+      }
+    }
+  ],
+  // Public values (safe to commit). The secret key is set with
+  // `npx wrangler secret put SUPABASE_SECRET_KEY` and locally in .dev.vars.
+  "vars": {
+    "SUPABASE_URL": "https://YOUR-PROJECT-REF.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_YOUR_KEY"
+  }
+}

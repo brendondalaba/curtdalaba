@@ -1,0 +1,251 @@
+---
+import Alert from "@/components/Alert.astro";
+import Player from "@/components/Player.astro";
+import AppLayout from "@/layouts/AppLayout.astro";
+import { formatDuration, formatSermonDate } from "@/lib/format";
+import { inputClass, labelClass } from "@/lib/ui";
+
+const { supabase, user, isAdmin } = Astro.locals;
+
+const [{ data: sermons, error }, { data: progressRows }] = await Promise.all([
+  supabase
+    .from("sermons")
+    .select("id, title, scripture, preached_on, duration_seconds")
+    .order("preached_on", { ascending: false })
+    .order("created_at", { ascending: false }),
+  supabase
+    .from("playback_progress")
+    .select("sermon_id, position_seconds, completed")
+    .eq("user_id", user?.id ?? ""),
+]);
+
+const progress = new Map(
+  (progressRows ?? []).map(row => [row.sermon_id, row])
+);
+
+const list = (sermons ?? []).map(sermon => {
+  const saved = progress.get(sermon.id);
+  const duration = sermon.duration_seconds ?? 0;
+  const position = saved?.position_seconds ?? 0;
+  const completed = saved?.completed ?? false;
+  const date = formatSermonDate(sermon.preached_on);
+  const fraction = completed
+    ? 1
+    : duration > 0
+      ? Math.min(1, position / duration)
+      : 0;
+  return {
+    ...sermon,
+    date,
+    year: sermon.preached_on.slice(0, 4),
+    duration,
+    position,
+    completed,
+    fraction,
+    subtitle: [sermon.scripture, date].filter(Boolean).join(" · "),
+    progressLabel: completed
+      ? "Played"
+      : position > 0 && duration > 0
+        ? `${formatDuration(duration - position)} left`
+        : "",
+    search: [sermon.title, sermon.scripture, date]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase(),
+  };
+});
+
+const years = [...new Set(list.map(sermon => sermon.year))];
+const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
+---
+
+<AppLayout title="Sermons" hasPlayer>
+  <div class="flex flex-col gap-2">
+    <h1 class="font-semibold text-3xl tracking-tight">Sermons</h1>
+    <p class="text-muted-foreground">
+      {list.length === 1 ? "1 recording" : `${list.length} recordings`}
+    </p>
+  </div>
+
+  {
+    passwordUpdated && (
+      <div class="mt-6">
+        <Alert tone="success" message="Your password has been updated." />
+      </div>
+    )
+  }
+  {
+    error && (
+      <div class="mt-6">
+        <Alert message="Sermons couldn't be loaded. Refresh to try again." />
+      </div>
+    )
+  }
+
+  {
+    list.length > 0 && (
+      <search class="mt-8 block">
+      <form
+        class="grid gap-3 sm:grid-cols-[1fr_auto]"
+        data-sermon-filter
+      >
+        <div class="flex flex-col gap-2">
+          <label for="sermon-search" class={labelClass}>
+            Search
+          </label>
+          <input
+            id="sermon-search"
+            name="q"
+            type="search"
+            autocomplete="off"
+            placeholder="Title or passage, e.g. Romans"
+            class={inputClass}
+          />
+        </div>
+        {years.length > 1 && (
+          <div class="flex flex-col gap-2">
+            <label for="sermon-year" class={labelClass}>
+              Year
+            </label>
+            <select
+              id="sermon-year"
+              name="year"
+              autocomplete="off"
+              class={`${inputClass} sm:w-36`}
+            >
+              <option value="">All years</option>
+              {years.map(year => (
+                <option value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </form>
+      </search>
+    )
+  }
+
+  <ul class="mt-6 flex flex-col gap-3" data-sermon-list>
+    {
+      list.map(sermon => (
+        <li
+          data-sermon-id={sermon.id}
+          data-title={sermon.title}
+          data-subtitle={sermon.subtitle}
+          data-duration={sermon.duration}
+          data-position={sermon.position}
+          data-completed={String(sermon.completed)}
+          data-search={sermon.search}
+          data-year={sermon.year}
+          class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
+        >
+          <button
+            type="button"
+            data-play-sermon
+            class="flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
+          >
+            <span class="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
+              <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true">
+                <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
+              </svg>
+              <span data-play-label class="sr-only">
+                Play
+              </span>
+            </span>
+            <span class="flex min-w-0 flex-1 flex-col gap-1">
+              <span class="font-medium leading-6">{sermon.title}</span>
+              <span class="text-muted-foreground text-sm">
+                {sermon.scripture && (
+                  <>
+                    <span class="text-foreground">{sermon.scripture}</span>
+                    <span aria-hidden="true"> · </span>
+                  </>
+                )}
+                <time datetime={sermon.preached_on}>{sermon.date}</time>
+                {sermon.duration > 0 && (
+                  <>
+                    <span aria-hidden="true"> · </span>
+                    {formatDuration(sermon.duration)}
+                  </>
+                )}
+              </span>
+              <span
+                data-progress-label
+                class="text-primary text-xs empty:hidden"
+              >
+                {sermon.progressLabel}
+              </span>
+            </span>
+          </button>
+          <div class="h-1 bg-muted" aria-hidden="true">
+            <div
+              data-progress-bar
+              class="h-full bg-primary"
+              style={`width: ${sermon.fraction * 100}%`}
+            />
+          </div>
+        </li>
+      ))
+    }
+  </ul>
+
+  <p
+    data-sermon-empty
+    hidden={list.length > 0}
+    class="mt-6 rounded-lg border border-dashed p-8 text-center text-muted-foreground"
+  >
+    {
+      list.length === 0 ? (
+        isAdmin ? (
+          <>
+            No sermons yet.{" "}
+            <a href="/admin" class="font-medium text-primary hover:underline">
+              Upload the first one
+            </a>
+            .
+          </>
+        ) : (
+          "No sermons yet. Check back soon."
+        )
+      ) : (
+        "No sermons match your search."
+      )
+    }
+  </p>
+
+  <Player slot="after" />
+</AppLayout>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-sermon-filter]");
+  const empty = document.querySelector<HTMLElement>("[data-sermon-empty]");
+  const items = document.querySelectorAll<HTMLElement>(
+    "[data-sermon-list] > li"
+  );
+
+  function applyFilter() {
+    if (!form || !empty) return;
+    const data = new FormData(form);
+    const words = String(data.get("q") ?? "")
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    const year = String(data.get("year") ?? "");
+    let shown = 0;
+    for (const item of items) {
+      const haystack = item.dataset.search ?? "";
+      const isMatch =
+        (!year || item.dataset.year === year) &&
+        words.every(word => haystack.includes(word));
+      item.hidden = !isMatch;
+      if (isMatch) shown++;
+    }
+    empty.hidden = shown > 0;
+  }
+
+  form?.addEventListener("input", applyFilter);
+  form?.addEventListener("submit", event => {
+    event.preventDefault();
+    applyFilter();
+  });
+</script>

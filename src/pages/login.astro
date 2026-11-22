@@ -1,0 +1,82 @@
+---
+import Alert from "@/components/Alert.astro";
+import FormField from "@/components/FormField.astro";
+import PasswordToggle from "@/components/PasswordToggle.astro";
+import SubmitButton from "@/components/SubmitButton.astro";
+import AuthLayout from "@/layouts/AuthLayout.astro";
+import {
+  formPassword,
+  formString,
+  isWithinAuthRateLimit,
+  safeRedirectPath,
+} from "@/lib/auth";
+
+const next = safeRedirectPath(Astro.url.searchParams.get("next"));
+let error: string | null =
+  Astro.url.searchParams.get("link") === "expired"
+    ? "That link has expired or was already used. Request a new one."
+    : null;
+let email = "";
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  email = formString(form, "email");
+  const password = formPassword(form, "password");
+
+  if (!(await isWithinAuthRateLimit(Astro.request, "login"))) {
+    error = "Too many attempts. Wait a minute and try again.";
+  } else if (!email || !password) {
+    error = "Enter your email and password.";
+  } else {
+    const { error: signInError } =
+      await Astro.locals.supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      error = "That email and password don't match an account.";
+    } else {
+      return Astro.redirect(next, 303);
+    }
+  }
+  Astro.response.status = 400;
+}
+---
+
+<AuthLayout title="Sign in" heading="Sign in">
+  <form method="post" class="flex flex-col gap-4">
+    <Alert message={error} />
+    <FormField
+      label="Email"
+      name="email"
+      type="email"
+      autocomplete="username"
+      inputmode="email"
+      autocapitalize="none"
+      spellcheck="false"
+      required
+      value={email}
+    />
+    <div class="flex flex-col gap-2">
+      <FormField
+        label="Password"
+        name="password"
+        id="current-password"
+        type="password"
+        autocomplete="current-password"
+        required
+      />
+      <PasswordToggle for="current-password" />
+    </div>
+    <SubmitButton pendingLabel="Signing in…">Sign in</SubmitButton>
+    <a
+      href="/forgot-password"
+      class="text-center font-medium text-primary text-sm hover:underline"
+    >
+      Forgot your password?
+    </a>
+  </form>
+  <Fragment slot="footer">
+    New here? Ask for the access code, then
+    <a href="/signup" class="font-medium text-primary hover:underline">
+      create an account
+    </a>.
+  </Fragment>
+</AuthLayout>

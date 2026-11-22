@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline · Curt Dalaba</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      /* Standalone page (no build step), so it carries its own copy of the
+         background/foreground/muted/primary tokens from src/styles/tokens.css. */
+      :root {
+        color-scheme: light dark;
+        --background: light-dark(oklch(0.99 0.002 255), oklch(0.17 0.01 255));
+        --foreground: light-dark(oklch(0.21 0.015 255), oklch(0.95 0.005 255));
+        --muted-foreground: light-dark(oklch(0.5 0.015 255), oklch(0.72 0.015 255));
+        --primary: light-dark(oklch(0.53 0.17 255), oklch(0.72 0.14 255));
+        --primary-foreground: light-dark(oklch(0.985 0.005 255), oklch(0.18 0.03 255));
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 1rem;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      p {
+        color: var(--muted-foreground);
+        line-height: 1.75;
+      }
+      button {
+        height: 2.5rem;
+        padding: 0 1rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--primary);
+        color: var(--primary-foreground);
+        font: inherit;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You're offline</h1>
+      <p>Sermons stream from the internet. Reconnect and try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

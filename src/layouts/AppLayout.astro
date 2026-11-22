@@ -1,0 +1,61 @@
+---
+import Logo from "@/components/Logo.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+
+type Props = {
+  title: string;
+  /** Leaves room at the bottom for the sticky audio player. */
+  hasPlayer?: boolean;
+};
+
+const { title, hasPlayer = false } = Astro.props;
+const { isAdmin } = Astro.locals;
+const path = Astro.url.pathname.replace(/\/$/, "") || "/";
+
+const links = [
+  { href: "/", label: "Sermons" },
+  ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+  { href: "/account", label: "Account" },
+];
+---
+
+<BaseLayout title={title}>
+  <header
+    class="sticky top-0 z-10 border-b bg-background/90 pt-[env(safe-area-inset-top)] backdrop-blur"
+  >
+    <div
+      class="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-4 sm:px-6"
+    >
+      <a href="/" class="flex items-center gap-2 font-semibold">
+        <Logo class="size-8" />
+        <span>Curt Dalaba</span>
+      </a>
+      <nav aria-label="Main">
+        <ul class="flex items-center gap-1">
+          {
+            links.map(link => (
+              <li>
+                <a
+                  href={link.href}
+                  aria-current={path === link.href ? "page" : undefined}
+                  class="inline-flex h-9 items-center rounded-md px-3 font-medium text-muted-foreground text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-[current=page]:text-foreground"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+    </div>
+  </header>
+  <main
+    class:list={[
+      "mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12",
+      hasPlayer && "pb-48",
+    ]}
+  >
+    <slot />
+  </main>
+  <slot name="after" />
+</BaseLayout>

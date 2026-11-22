@@ -1,0 +1,104 @@
+---
+import Alert from "@/components/Alert.astro";
+import FormField from "@/components/FormField.astro";
+import InstallApp from "@/components/InstallApp.astro";
+import PasswordToggle from "@/components/PasswordToggle.astro";
+import SubmitButton from "@/components/SubmitButton.astro";
+import ThemeToggle from "@/components/ThemeToggle.astro";
+import AppLayout from "@/layouts/AppLayout.astro";
+import { formPassword, MIN_PASSWORD_LENGTH } from "@/lib/auth";
+import { buttonSecondary, cardClass } from "@/lib/ui";
+
+const { supabase, user } = Astro.locals;
+let passwordError: string | null = null;
+let passwordSaved = false;
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const password = formPassword(form, "new-password");
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    passwordError = `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
+  } else {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      passwordError =
+        error.code === "same_password"
+          ? "That's your current password. Choose a new one."
+          : "We couldn't update your password. Try again.";
+    } else {
+      passwordSaved = true;
+    }
+  }
+  if (passwordError) Astro.response.status = 400;
+}
+
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("full_name, email")
+  .eq("id", user?.id ?? "")
+  .maybeSingle();
+---
+
+<AppLayout title="Account">
+  <h1 class="font-semibold text-3xl tracking-tight">Account</h1>
+
+  <div class="mt-8 flex flex-col gap-6">
+    <section class={cardClass} aria-labelledby="profile-heading">
+      <h2 id="profile-heading" class="font-medium text-lg">Signed in as</h2>
+      {profile?.full_name && <p class="mt-2">{profile.full_name}</p>}
+      <p class="text-muted-foreground">{profile?.email ?? user?.email}</p>
+      <form method="post" action="/logout" class="mt-4">
+        <button type="submit" class={buttonSecondary}>Sign out</button>
+      </form>
+    </section>
+
+    <section class={cardClass} aria-labelledby="install-heading">
+      <h2 id="install-heading" class="mb-2 font-medium text-lg">
+        Get the app
+      </h2>
+      <InstallApp />
+    </section>
+
+    <section class={cardClass} aria-labelledby="password-heading">
+      <h2 id="password-heading" class="font-medium text-lg">Change password</h2>
+      <form method="post" class="mt-4 flex max-w-sm flex-col gap-4">
+        <Alert message={passwordError} />
+        <Alert
+          tone="success"
+          message={passwordSaved ? "Password updated." : null}
+        />
+        <input
+          type="email"
+          name="email"
+          autocomplete="username"
+          value={user?.email}
+          hidden
+          readonly
+        />
+        <div class="flex flex-col gap-2">
+          <FormField
+            label="New password"
+            name="new-password"
+            type="password"
+            autocomplete="new-password"
+            minlength={MIN_PASSWORD_LENGTH}
+            hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+            required
+          />
+          <PasswordToggle for="new-password" />
+        </div>
+        <SubmitButton pendingLabel="Saving…" class="sm:w-auto">
+          Save password
+        </SubmitButton>
+      </form>
+    </section>
+
+    <section class={cardClass} aria-labelledby="theme-heading">
+      <h2 id="theme-heading" class="font-medium text-lg">Appearance</h2>
+      <p class="mt-2 mb-4 text-muted-foreground">
+        Follow your device, or pick light or dark.
+      </p>
+      <ThemeToggle />
+    </section>
+  </div>
+</AppLayout>

@@ -1,0 +1,20 @@
+---
+type Props = { class?: string };
+const { class: className } = Astro.props;
+---
+
+<!-- Same mark as public/favicon.svg and the app icons, drawn in theme tokens. -->
+<svg
+  viewBox="0 0 32 32"
+  class:list={["shrink-0", className]}
+  aria-hidden="true"
+  focusable="false"
+>
+  <rect width="32" height="32" rx="7" class="fill-primary"></rect>
+  <path
+    d="M16 10.5c-2-1.4-4.6-2-7.5-1.8v13c2.9-.2 5.5.4 7.5 1.8 2-1.4 4.6-2 7.5-1.8v-13c-2.9-.2-5.5.4-7.5 1.8Zm0 0v13"
+    fill="none"
+    stroke-width="1.8"
+    stroke-linejoin="round"
+    class="stroke-primary-foreground"></path>
+</svg>

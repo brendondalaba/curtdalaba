@@ -1,0 +1,139 @@
+---
+import Alert from "@/components/Alert.astro";
+import FormField from "@/components/FormField.astro";
+import PasswordToggle from "@/components/PasswordToggle.astro";
+import SubmitButton from "@/components/SubmitButton.astro";
+import AuthLayout from "@/layouts/AuthLayout.astro";
+import {
+  accessCodesMatch,
+  formPassword,
+  formString,
+  isWithinAuthRateLimit,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/auth";
+import { createSupabaseAdminClient } from "@/lib/supabase";
+
+let error: string | null = null;
+let fullName = "";
+let email = "";
+
+async function createAccount(form: FormData) {
+  fullName = formString(form, "full-name");
+  email = formString(form, "email");
+  const password = formPassword(form, "new-password");
+  const accessCode = formString(form, "access-code");
+
+  // Rate-limit before checking the code so it can't be brute-forced.
+  if (!(await isWithinAuthRateLimit(Astro.request, "signup"))) {
+    return "Too many attempts. Wait a minute and try again.";
+  }
+  if (!fullName || !email || !password || !accessCode) {
+    return "Fill in every field.";
+  }
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return `Use a password of at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: settings, error: settingsError } = await admin
+    .from("app_settings")
+    .select("access_code")
+    .eq("id", 1)
+    .single();
+  if (settingsError || !settings) {
+    console.error("Couldn't read access code", settingsError);
+    return "Something went wrong on our end. Try again in a moment.";
+  }
+  if (!(await accessCodesMatch(accessCode, settings.access_code))) {
+    return "That access code isn't right. Check with the person who shared it.";
+  }
+
+  // access_granted is what the database trigger checks (see the migration).
+  const { error: createError } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: fullName },
+    app_metadata: { access_granted: true },
+  });
+  if (createError) {
+    if (createError.code === "email_exists") {
+      return "An account with that email already exists. Sign in instead.";
+    }
+    if (createError.code === "weak_password") {
+      return "Choose a stronger password.";
+    }
+    console.error("Couldn't create user", createError);
+    return "We couldn't create your account. Check your email and try again.";
+  }
+
+  const { error: signInError } =
+    await Astro.locals.supabase.auth.signInWithPassword({ email, password });
+  if (signInError) {
+    return "Your account is ready. Sign in to continue.";
+  }
+  return null;
+}
+
+if (Astro.request.method === "POST") {
+  error = await createAccount(await Astro.request.formData());
+  if (!error) return Astro.redirect("/", 303);
+  Astro.response.status = 400;
+}
+---
+
+<AuthLayout
+  title="Create account"
+  heading="Create your account"
+  intro="You'll need the access code from someone who already has one."
+>
+  <form method="post" class="flex flex-col gap-4">
+    <Alert message={error} />
+    <FormField
+      label="Name"
+      name="full-name"
+      type="text"
+      autocomplete="name"
+      required
+      value={fullName}
+    />
+    <FormField
+      label="Email"
+      name="email"
+      type="email"
+      autocomplete="username"
+      inputmode="email"
+      autocapitalize="none"
+      spellcheck="false"
+      required
+      value={email}
+    />
+    <div class="flex flex-col gap-2">
+      <FormField
+        label="Password"
+        name="new-password"
+        type="password"
+        autocomplete="new-password"
+        minlength={MIN_PASSWORD_LENGTH}
+        hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+        required
+      />
+      <PasswordToggle for="new-password" />
+    </div>
+    <FormField
+      label="Access code"
+      name="access-code"
+      type="text"
+      autocomplete="off"
+      autocapitalize="characters"
+      spellcheck="false"
+      required
+    />
+    <SubmitButton pendingLabel="Creating account…">Create account</SubmitButton>
+  </form>
+  <Fragment slot="footer">
+    Already have an account?
+    <a href="/login" class="font-medium text-primary hover:underline">Sign in</a
+    >.
+  </Fragment>
+</AuthLayout>

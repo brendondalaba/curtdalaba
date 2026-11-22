@@ -1,0 +1,25 @@
+---
+import type { HTMLAttributes } from "astro/types";
+import { inputClass, labelClass } from "@/lib/ui";
+
+type Props = HTMLAttributes<"input"> & {
+  label: string;
+  name: string;
+  hint?: string;
+};
+
+const { label, name, hint, id = name, ...inputProps } = Astro.props;
+const hintId = hint ? `${id}-hint` : undefined;
+---
+
+<div class="flex flex-col gap-2">
+  <label for={id} class={labelClass}>{label}</label>
+  <input
+    id={id}
+    name={name}
+    class={inputClass}
+    aria-describedby={hintId}
+    {...inputProps}
+  />
+  {hint && <p id={hintId} class="text-muted-foreground text-sm">{hint}</p>}
+</div>

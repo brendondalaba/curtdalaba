@@ -1,0 +1,42 @@
+---
+import { buttonPrimary } from "@/lib/ui";
+
+type Props = {
+  /** Shown while the form is submitting, e.g. "Signing in…". */
+  pendingLabel: string;
+  class?: string;
+};
+
+const { pendingLabel, class: className } = Astro.props;
+---
+
+<button
+  type="submit"
+  data-pending-label={pendingLabel}
+  class:list={[buttonPrimary, "w-full", className]}
+>
+  <slot />
+</button>
+
+<script>
+  // Show progress and block double submits. aria-disabled keeps focus on the button.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "button[data-pending-label]"
+  )) {
+    const idleLabel = button.textContent ?? "";
+    button.form?.addEventListener("submit", event => {
+      if (button.getAttribute("aria-disabled") === "true") {
+        event.preventDefault();
+        return;
+      }
+      button.setAttribute("aria-disabled", "true");
+      button.textContent = button.dataset.pendingLabel ?? "Working…";
+    });
+    // Reset if the page comes back from the back/forward cache.
+    window.addEventListener("pageshow", event => {
+      if (!event.persisted) return;
+      button.removeAttribute("aria-disabled");
+      button.textContent = idleLabel;
+    });
+  }
+</script>
