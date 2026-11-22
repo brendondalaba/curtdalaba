@@ -4,13 +4,19 @@ type UploadInput = {
   file: File;
   title: string;
   scripture: string;
-  preachedOn: string;
   onProgress: (fraction: number) => void;
 };
 
 type UploadedPart = { partNumber: number; etag: string };
 
 const PART_RETRIES = 3;
+
+/** Today's date in the browser's time zone, as YYYY-MM-DD. */
+function localDate() {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 async function request<T>(url: string, init: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -116,7 +122,8 @@ export async function uploadSermon(input: UploadInput) {
       parts,
       title: input.title,
       scripture: input.scripture,
-      preachedOn: input.preachedOn,
+      // The list shows the upload date; send today as the admin sees it.
+      uploadedOn: localDate(),
       durationSeconds,
     });
     return id;

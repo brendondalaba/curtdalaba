@@ -6,7 +6,7 @@ import AppLayout from "@/layouts/AppLayout.astro";
 import { formString, normalizeAccessCode } from "@/lib/auth";
 import { type Member, nowIso, type SermonListItem } from "@/lib/db";
 import { formatDuration, formatSermonDate } from "@/lib/format";
-import { isIsoDate, isUuid, sermonAudioKey } from "@/lib/sermons";
+import { isUuid, sermonAudioKey } from "@/lib/sermons";
 import { createPasswordReset, endOtherSessions } from "@/lib/session";
 import {
   buttonDanger,
@@ -43,16 +43,14 @@ async function handle(form: FormData): Promise<string | null> {
   if (intent === "update-sermon") {
     const title = formString(form, "title");
     const scripture = formString(form, "scripture");
-    const preachedOn = formString(form, "preached_on");
     if (!isUuid(id)) throw new AdminError("Unknown sermon.");
     if (!title || title.length > 200) throw new AdminError("Add a title.");
     if (scripture.length > 200) throw new AdminError("Scripture is too long.");
-    if (!isIsoDate(preachedOn)) throw new AdminError("Add the date preached.");
     await db
       .prepare(
-        "update sermons set title = ?, scripture = ?, preached_on = ? where id = ?"
+        "update sermons set title = ?, scripture = ? where id = ?"
       )
-      .bind(title, scripture || null, preachedOn, id)
+      .bind(title, scripture || null, id)
       .run();
     return "saved";
   }
@@ -293,7 +291,7 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
                       class={inputClass}
                     />
                   </div>
-                  <div class="flex flex-col gap-2">
+                  <div class="flex flex-col gap-2 sm:col-span-2">
                     <label for={`scripture-${sermon.id}`} class={labelClass}>
                       Scripture (optional)
                     </label>
@@ -303,20 +301,6 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
                       value={sermon.scripture ?? ""}
                       maxlength="200"
                       autocomplete="off"
-                      class={inputClass}
-                    />
-                  </div>
-                  <div class="flex flex-col gap-2">
-                    <label for={`date-${sermon.id}`} class={labelClass}>
-                      Date preached
-                    </label>
-                    <input
-                      id={`date-${sermon.id}`}
-                      name="preached_on"
-                      type="date"
-                      value={sermon.preached_on}
-                      autocomplete="off"
-                      required
                       class={inputClass}
                     />
                   </div>

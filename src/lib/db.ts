@@ -16,6 +16,7 @@ export type SermonRow = {
   id: string;
   title: string;
   scripture: string | null;
+  /** Date shown in the list. Set to the upload date (column name kept from v1). */
   preached_on: string;
   audio_content_type: string;
   audio_size_bytes: number | null;

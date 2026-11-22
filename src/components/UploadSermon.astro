@@ -1,8 +1,6 @@
 ---
 import { MAX_UPLOAD_MB } from "@/lib/sermons";
 import { buttonPrimary, inputClass, labelClass } from "@/lib/ui";
-
-const today = new Date().toISOString().slice(0, 10);
 ---
 
 <form data-upload-form class="mt-4 grid gap-4 sm:grid-cols-2" novalidate>
@@ -33,7 +31,7 @@ const today = new Date().toISOString().slice(0, 10);
       class={inputClass}
     />
   </div>
-  <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2 sm:col-span-2">
     <label for="upload-scripture" class={labelClass}>Scripture (optional)</label
     >
     <input
@@ -43,18 +41,6 @@ const today = new Date().toISOString().slice(0, 10);
       maxlength="200"
       autocomplete="off"
       placeholder="e.g. John 3:1–21"
-      class={inputClass}
-    />
-  </div>
-  <div class="flex flex-col gap-2">
-    <label for="upload-date" class={labelClass}>Date preached</label>
-    <input
-      id="upload-date"
-      name="preached_on"
-      type="date"
-      value={today}
-      autocomplete="off"
-      required
       class={inputClass}
     />
   </div>
@@ -109,7 +95,6 @@ const today = new Date().toISOString().slice(0, 10);
         file,
         title: String(data.get("title") ?? ""),
         scripture: String(data.get("scripture") ?? ""),
-        preachedOn: String(data.get("preached_on") ?? ""),
         onProgress: fraction => {
           progress.value = Math.round(fraction * 100);
           status.textContent = `Uploading… ${Math.round(fraction * 100)}%`;

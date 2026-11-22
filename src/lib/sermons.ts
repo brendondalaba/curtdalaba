@@ -24,3 +24,15 @@ export function isIsoDate(value: unknown): value is string {
     !Number.isNaN(Date.parse(value))
   );
 }
+
+/**
+ * The date a sermon is listed under: the day it was uploaded. Uses the
+ * uploader's local date when it's within a day of now (time zones), so an
+ * evening upload in the US isn't listed as tomorrow; otherwise today in UTC.
+ */
+export function uploadDate(browserDate: unknown) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!isIsoDate(browserDate)) return today;
+  const offByMs = Math.abs(Date.parse(browserDate) - Date.parse(today));
+  return offByMs <= 24 * 60 * 60 * 1000 ? browserDate : today;
+}

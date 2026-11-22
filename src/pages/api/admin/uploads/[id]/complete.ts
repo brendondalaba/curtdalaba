@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { jsonError, readJsonObject, requireAdmin } from "@/lib/api";
-import { isIsoDate, isUuid, sermonAudioKey } from "@/lib/sermons";
+import { isUuid, sermonAudioKey, uploadDate } from "@/lib/sermons";
 
 function isPartList(value: unknown): value is R2UploadedPart[] {
   return (
@@ -27,7 +27,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const title = typeof body?.title === "string" ? body.title.trim() : "";
   const scripture =
     typeof body?.scripture === "string" ? body.scripture.trim() : "";
-  const preachedOn = body?.preachedOn;
+  const preachedOn = uploadDate(body?.uploadedOn);
   const duration = body?.durationSeconds;
   const uploadId = body?.uploadId;
   const parts = body?.parts;
@@ -37,7 +37,6 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   }
   if (!title || title.length > 200) return jsonError("Add a title", 400);
   if (scripture.length > 200) return jsonError("Scripture is too long", 400);
-  if (!isIsoDate(preachedOn)) return jsonError("Add the date preached", 400);
 
   const key = sermonAudioKey(params.id);
   const upload = env.SERMONS_BUCKET.resumeMultipartUpload(key, uploadId);
