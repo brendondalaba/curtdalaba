@@ -19,7 +19,7 @@ try {
         order by preached_on desc, created_at desc`
     ),
     env.DB.prepare(
-      `select sermon_id, position_seconds, completed from playback_progress
+      `select sermon_id, position_seconds, completed, updated_at from playback_progress
         where user_id = ?`
     ).bind(user?.id ?? ""),
   ]);
@@ -46,6 +46,7 @@ const list = sermons.map(sermon => {
   return {
     ...sermon,
     date,
+    listenedAt: saved?.updated_at ?? "",
     year: sermon.preached_on.slice(0, 4),
     duration,
     position,
@@ -63,6 +64,25 @@ const list = sermons.map(sermon => {
       .toLowerCase(),
   };
 });
+
+// Most recently played first, so the sermon you were just on is on top.
+const inProgress = list
+  .filter(sermon => !sermon.completed && sermon.position > 0)
+  .sort((a, b) => b.listenedAt.localeCompare(a.listenedAt));
+const unplayed = list.filter(
+  sermon => !sermon.completed && sermon.position <= 0
+);
+const played = list.filter(sermon => sermon.completed);
+const sections = [
+  { id: "continue", heading: "Continue listening", sermons: inProgress },
+  {
+    id: "unplayed",
+    // A heading only helps when there's another section to tell it from.
+    heading: unplayed.length < list.length ? "Not yet played" : "",
+    sermons: unplayed,
+  },
+  { id: "played", heading: "Played", sermons: played },
+].filter(section => section.sermons.length > 0);
 
 const years = [...new Set(list.map(sermon => sermon.year))];
 const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
@@ -134,69 +154,87 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
     )
   }
 
-  <ul class="mt-6 flex flex-col gap-3" data-sermon-list>
-    {
-      list.map(sermon => (
-        <li
-          data-sermon-id={sermon.id}
-          data-title={sermon.title}
-          data-subtitle={sermon.subtitle}
-          data-duration={sermon.duration}
-          data-position={sermon.position}
-          data-completed={String(sermon.completed)}
-          data-search={sermon.search}
-          data-year={sermon.year}
-          class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
-        >
-          <button
-            type="button"
-            data-play-sermon
-            class="flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
+  {
+    sections.map(section => (
+      <section
+        aria-labelledby={section.heading ? `${section.id}-heading` : undefined}
+        class="mt-8 flex flex-col gap-3"
+        data-sermon-section
+      >
+        {section.heading && (
+          <h2
+            id={`${section.id}-heading`}
+            class="font-medium text-lg"
           >
-            <span class="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
-              <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true">
-                <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
-              </svg>
-              <span data-play-label class="sr-only">
-                Play
-              </span>
-            </span>
-            <span class="flex min-w-0 flex-1 flex-col gap-1">
-              <span class="font-medium leading-6">{sermon.title}</span>
-              <span class="text-muted-foreground text-sm">
-                {sermon.scripture && (
-                  <>
-                    <span class="text-foreground">{sermon.scripture}</span>
-                    <span aria-hidden="true"> · </span>
-                  </>
-                )}
-                <time datetime={sermon.preached_on}>{sermon.date}</time>
-                {sermon.duration > 0 && (
-                  <>
-                    <span aria-hidden="true"> · </span>
-                    {formatDuration(sermon.duration)}
-                  </>
-                )}
-              </span>
-              <span
-                data-progress-label
-                class="text-primary text-xs empty:hidden"
+            {section.heading}
+          </h2>
+        )}
+        <ul class="flex flex-col gap-3" data-sermon-list>
+          {
+            section.sermons.map(sermon => (
+              <li
+                data-sermon-id={sermon.id}
+                data-title={sermon.title}
+                data-subtitle={sermon.subtitle}
+                data-duration={sermon.duration}
+                data-position={sermon.position}
+                data-completed={String(sermon.completed)}
+                data-search={sermon.search}
+                data-year={sermon.year}
+                class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
               >
-                {sermon.progressLabel}
-              </span>
-            </span>
-          </button>
-          <div class="h-1 bg-muted" aria-hidden="true">
-            <div
-              data-progress-bar
-              class="h-full bg-primary"
-              style={`width: ${sermon.fraction * 100}%`}
-            />
-          </div>
-        </li>
-      ))
-    }
-  </ul>
+                <button
+                  type="button"
+                  data-play-sermon
+                  class="flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
+                >
+                  <span class="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
+                    <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true">
+                      <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
+                    </svg>
+                    <span data-play-label class="sr-only">
+                      Play
+                    </span>
+                  </span>
+                  <span class="flex min-w-0 flex-1 flex-col gap-1">
+                    <span class="font-medium leading-6">{sermon.title}</span>
+                    <span class="text-muted-foreground text-sm">
+                      {sermon.scripture && (
+                        <>
+                          <span class="text-foreground">{sermon.scripture}</span>
+                          <span aria-hidden="true"> · </span>
+                        </>
+                      )}
+                      <time datetime={sermon.preached_on}>{sermon.date}</time>
+                      {sermon.duration > 0 && (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          {formatDuration(sermon.duration)}
+                        </>
+                      )}
+                    </span>
+                    <span
+                      data-progress-label
+                      class="text-primary text-xs empty:hidden"
+                    >
+                      {sermon.progressLabel}
+                    </span>
+                  </span>
+                </button>
+                <div class="h-1 bg-muted" aria-hidden="true">
+                  <div
+                    data-progress-bar
+                    class="h-full bg-primary"
+                    style={`width: ${sermon.fraction * 100}%`}
+                  />
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+      </section>
+    ))
+  }
 
   <p
     data-sermon-empty
@@ -231,6 +269,9 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
   const items = document.querySelectorAll<HTMLElement>(
     "[data-sermon-list] > li"
   );
+  const sections = document.querySelectorAll<HTMLElement>(
+    "[data-sermon-section]"
+  );
 
   function applyFilter() {
     if (!form || !empty) return;
@@ -248,6 +289,9 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
         words.every(word => haystack.includes(word));
       item.hidden = !isMatch;
       if (isMatch) shown++;
+    }
+    for (const section of sections) {
+      section.hidden = !section.querySelector("li:not([hidden])");
     }
     empty.hidden = shown > 0;
   }
