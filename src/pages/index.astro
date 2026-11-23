@@ -164,13 +164,13 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
       <section
         aria-labelledby={`${section.id}-heading`}
         hidden={section.sermons.length === 0}
-        class="mt-8 flex flex-col gap-3"
+        class="mt-8 flex flex-col gap-2"
         data-sermon-section={section.id}
       >
-        <h2 id={`${section.id}-heading`} class="font-semibold text-xl tracking-tight">
+        <h2 id={`${section.id}-heading`} class="font-semibold text-lg tracking-tight">
           {section.heading}
         </h2>
-        <ul class="flex flex-col gap-3" data-sermon-list={section.id}>
+        <ul class="-mx-2 flex flex-col" data-sermon-list={section.id}>
           {section.sermons.map(sermon => (
             <li
               data-sermon-id={sermon.id}
@@ -184,94 +184,99 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
               data-state={section.id}
               data-search={sermon.search}
               data-year={sermon.year}
-              class="group overflow-hidden rounded-xl border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
+              class="group flex items-center rounded-lg transition-colors duration-150 hover:bg-accent/50 data-active:bg-accent/50"
             >
-              <div class="flex items-stretch">
-                <button
-                  type="button"
-                  data-play-sermon
-                  class="flex min-w-0 flex-1 items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
-                >
-                  <span class="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
-                    <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true">
-                      <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
-                    </svg>
-                    <span data-play-label class="sr-only">
-                      Play
-                    </span>
+              <button
+                type="button"
+                data-play-sermon
+                class="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pl-2 text-left"
+              >
+                <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
+                  <svg viewBox="0 0 24 24" class="size-4" aria-hidden="true">
+                    <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
+                  </svg>
+                  <span data-play-label class="sr-only">
+                    Play
                   </span>
-                  <span class="flex min-w-0 flex-1 flex-col gap-1">
-                    <span class="font-medium leading-6">{sermon.title}</span>
-                    <span class="text-muted-foreground text-sm">
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span class="truncate font-medium text-sm group-data-active:text-primary">
+                    {sermon.title}
+                  </span>
+                  <span class="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
+                    <span class="truncate">
                       {sermon.scripture && (
                         <>
-                          <span class="text-foreground">{sermon.scripture}</span>
+                          {sermon.scripture}
                           <span aria-hidden="true"> · </span>
                         </>
                       )}
                       <time datetime={sermon.preached_on}>{sermon.date}</time>
                       {sermon.duration > 0 && (
-                        <>
+                        <span class="group-data-[state=continue]:hidden">
                           <span aria-hidden="true"> · </span>
                           {formatDuration(sermon.duration)}
-                        </>
+                        </span>
                       )}
                     </span>
                     <span
+                      class="hidden h-1 w-8 shrink-0 overflow-hidden rounded-full bg-muted group-data-[state=continue]:block"
+                      aria-hidden="true"
+                    >
+                      <span
+                        data-progress-bar
+                        class="block h-full bg-primary"
+                        style={`width: ${sermon.fraction * 100}%`}
+                      />
+                    </span>
+                    <span
                       data-progress-label
-                      class="text-primary text-xs empty:hidden"
+                      class="hidden shrink-0 text-primary tabular-nums group-data-[state=continue]:inline"
                     >
                       {sermon.progressLabel}
                     </span>
                   </span>
-                </button>
-                <button
-                  type="button"
-                  data-mark-played
-                  aria-label={`Mark "${sermon.title}" as played`}
-                  title="Mark as played"
-                  class="hidden w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground group-data-[state=continue]:inline-flex"
+                </span>
+              </button>
+              <button
+                type="button"
+                data-mark-played
+                aria-label={`Mark "${sermon.title}" as played`}
+                title="Mark as played"
+                class="mr-1 hidden size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground group-data-[state=continue]:inline-flex"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  class="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    class="size-5"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M5 12.5l4.5 4.5L19 7.5" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  data-favorite-toggle
-                  aria-label={`Favorite "${sermon.title}"`}
-                  aria-pressed={sermon.favorite ? "true" : "false"}
-                  title="Favorite"
-                  class="hidden w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:text-primary group-data-[state=played]:inline-flex"
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                data-favorite-toggle
+                aria-label={`Favorite "${sermon.title}"`}
+                aria-pressed={sermon.favorite ? "true" : "false"}
+                title="Favorite"
+                class="mr-1 hidden size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:text-primary group-data-[state=played]:inline-flex"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  class="size-4 fill-none group-data-[favorite=true]:fill-current"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    class="size-5 fill-none group-data-[favorite=true]:fill-current"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5Z" />
-                  </svg>
-                </button>
-              </div>
-              <div class="h-1 bg-muted" aria-hidden="true">
-                <div
-                  data-progress-bar
-                  class="h-full bg-primary"
-                  style={`width: ${sermon.fraction * 100}%`}
-                />
-              </div>
+                  <path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5Z" />
+                </svg>
+              </button>
             </li>
           ))}
         </ul>
