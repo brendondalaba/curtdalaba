@@ -75,6 +75,8 @@ export function initPlayer() {
   let track: Track | null = null;
   let lastSavedAt = 0;
   let isScrubbing = false;
+  /** Set while "mark as played" pauses, so the pause doesn't save a position. */
+  let isMarkingPlayed = false;
   let rate = Number(readStorage(RATE_KEY));
   if (!RATES.includes(rate)) rate = 1;
 
@@ -269,9 +271,43 @@ export function initPlayer() {
     audio.currentTime = Number(seek.value);
   });
 
+  /** Lets the sermon list move the row into Played. */
+  function announcePlayed(id: string) {
+    document.dispatchEvent(new CustomEvent("sermon:played", { detail: id }));
+  }
+
+  function markPlayed(item: HTMLElement) {
+    const id = item.dataset.sermonId ?? "";
+    if (track?.id === id) {
+      if (!audio.paused) {
+        isMarkingPlayed = true;
+        audio.pause();
+      }
+      // Rewind so later saves (backgrounding, leaving) don't undo the mark.
+      audio.currentTime = 0;
+      save({ completed: true });
+    } else {
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sermonId: id, position: 0, completed: true }),
+        keepalive: true,
+      }).catch(() => {
+        // Offline: the row still moves; it returns on reload if unsaved.
+      });
+    }
+    announcePlayed(id);
+  }
+
   // Sermon list: tapping a row plays it, or toggles if it's already loaded.
   document.addEventListener("click", event => {
     const target = event.target as Element | null;
+    const markButton = target?.closest<HTMLElement>("[data-mark-played]");
+    const markItem = markButton?.closest<HTMLElement>("[data-sermon-id]");
+    if (markItem) {
+      markPlayed(markItem);
+      return;
+    }
     const button = target?.closest<HTMLElement>("[data-play-sermon]");
     const item = button?.closest<HTMLElement>("[data-sermon-id]");
     if (!item) return;
@@ -295,11 +331,13 @@ export function initPlayer() {
   audio.addEventListener("play", renderPlaying);
   audio.addEventListener("pause", () => {
     renderPlaying();
-    if (!audio.ended) save();
+    if (isMarkingPlayed) isMarkingPlayed = false;
+    else if (!audio.ended) save();
   });
   audio.addEventListener("ended", () => {
     renderPlaying();
     save({ completed: true });
+    if (track) announcePlayed(track.id);
   });
   audio.addEventListener("ratechange", updatePositionState);
   audio.addEventListener("seeked", () => {
