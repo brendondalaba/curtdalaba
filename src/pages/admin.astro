@@ -152,7 +152,7 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 ---
 
 <AppLayout title="Admin">
-  <h1 class="font-semibold text-3xl tracking-tight">Admin</h1>
+  <h1 class="font-semibold text-2xl tracking-tight">Admin</h1>
 
   {
     (error || notice) && (
@@ -169,10 +169,10 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
         class={`${cardClass} mt-6 border-primary`}
         aria-labelledby="reset-heading"
       >
-        <h2 id="reset-heading" class="font-medium text-lg">
+        <h2 id="reset-heading" class="font-semibold leading-none">
           Reset link for {resetLink.email}
         </h2>
-        <p class="mt-2 text-muted-foreground leading-7">
+        <p class="mt-1.5 text-muted-foreground">
           Send this to them by text or email. It works once, for 3 days, and
           won't be shown again.
         </p>
@@ -203,13 +203,13 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
   <div class="mt-8 flex flex-col gap-6">
     <section class={cardClass} aria-labelledby="upload-heading">
-      <h2 id="upload-heading" class="font-medium text-lg">Upload a sermon</h2>
+      <h2 id="upload-heading" class="font-semibold leading-none">Upload a sermon</h2>
       <UploadSermon />
     </section>
 
     <section class={cardClass} aria-labelledby="code-heading">
-      <h2 id="code-heading" class="font-medium text-lg">Access code</h2>
-      <p class="mt-2 text-muted-foreground leading-7">
+      <h2 id="code-heading" class="font-semibold leading-none">Access code</h2>
+      <p class="mt-1.5 text-muted-foreground">
         New members enter this once when they create an account. Changing it
         doesn't sign anyone out.
       </p>
@@ -222,7 +222,7 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
       </p>
       <form
         method="post"
-        class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
+        class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-end"
       >
         <input type="hidden" name="intent" value="access-code" />
         <div class="flex flex-1 flex-col gap-2">
@@ -245,10 +245,10 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
     </section>
 
     <section class={cardClass} aria-labelledby="sermons-heading">
-      <h2 id="sermons-heading" class="font-medium text-lg">
+      <h2 id="sermons-heading" class="font-semibold leading-none">
         Sermons ({sermons?.length ?? 0})
       </h2>
-      <ul class="mt-4 flex flex-col divide-y">
+      <ul class="mt-6 flex flex-col divide-y">
         {
           (sermons ?? []).map(sermon => (
             <li class="py-3">
@@ -333,10 +333,10 @@ const joined = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
     </section>
 
     <section class={cardClass} aria-labelledby="members-heading">
-      <h2 id="members-heading" class="font-medium text-lg">
+      <h2 id="members-heading" class="font-semibold leading-none">
         Members ({members?.length ?? 0})
       </h2>
-      <ul class="mt-4 flex flex-col divide-y">
+      <ul class="mt-6 flex flex-col divide-y">
         {
           (members ?? []).map(member => (
             <li class="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
