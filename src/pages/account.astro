@@ -57,11 +57,11 @@ if (Astro.request.method === "POST") {
 ---
 
 <AppLayout title="Account">
-  <h1 class="font-semibold text-3xl tracking-tight">Account</h1>
+  <h1 class="font-semibold text-2xl tracking-tight">Account</h1>
 
   <div class="mt-8 flex flex-col gap-6">
     <section class={cardClass} aria-labelledby="profile-heading">
-      <h2 id="profile-heading" class="font-medium text-lg">Signed in as</h2>
+      <h2 id="profile-heading" class="font-semibold leading-none">Signed in as</h2>
       {user?.fullName && <p class="mt-2">{user.fullName}</p>}
       <p class="text-muted-foreground">{user?.email}</p>
       <form method="post" action="/logout" class="mt-4">
@@ -70,15 +70,15 @@ if (Astro.request.method === "POST") {
     </section>
 
     <section class={cardClass} aria-labelledby="install-heading">
-      <h2 id="install-heading" class="mb-2 font-medium text-lg">
+      <h2 id="install-heading" class="mb-2 font-semibold leading-none">
         Get the app
       </h2>
       <InstallApp />
     </section>
 
     <section class={cardClass} aria-labelledby="password-heading">
-      <h2 id="password-heading" class="font-medium text-lg">Change password</h2>
-      <form method="post" class="mt-4 flex max-w-sm flex-col gap-4">
+      <h2 id="password-heading" class="font-semibold leading-none">Change password</h2>
+      <form method="post" class="mt-6 flex max-w-sm flex-col gap-6">
         <Alert message={passwordError} />
         <Alert
           tone="success"
@@ -121,8 +121,8 @@ if (Astro.request.method === "POST") {
     </section>
 
     <section class={cardClass} aria-labelledby="theme-heading">
-      <h2 id="theme-heading" class="font-medium text-lg">Appearance</h2>
-      <p class="mt-2 mb-4 text-muted-foreground">
+      <h2 id="theme-heading" class="font-semibold leading-none">Appearance</h2>
+      <p class="mt-1.5 mb-6 text-muted-foreground">
         Follow your device, or pick light or dark.
       </p>
       <ThemeToggle />

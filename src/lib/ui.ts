@@ -1,21 +1,23 @@
 // Shared class strings for the bd-style patterns in docs/DESIGN.md.
 
-export const buttonPrimary =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 font-medium text-primary-foreground transition-colors duration-150 hover:bg-primary/90 disabled:opacity-60 aria-disabled:opacity-60";
+const button =
+  "inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 font-medium text-sm transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50";
 
-export const buttonSecondary =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-secondary px-4 font-medium text-secondary-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground disabled:opacity-60";
+export const buttonPrimary = `${button} bg-primary text-primary-foreground hover:bg-primary/90 aria-disabled:pointer-events-none aria-disabled:opacity-50`;
 
-export const buttonDanger =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-md bg-danger px-4 font-medium text-danger-foreground transition-colors duration-150 hover:bg-danger/90 disabled:opacity-60";
+export const buttonSecondary = `${button} bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground`;
 
-export const buttonGhost =
-  "inline-flex h-10 items-center justify-center gap-2 rounded-md px-3 font-medium transition-colors duration-150 hover:bg-accent hover:text-accent-foreground";
+export const buttonDanger = `${button} bg-danger text-danger-foreground hover:bg-danger/90`;
+
+export const buttonGhost = `${button} hover:bg-accent hover:text-accent-foreground`;
 
 export const inputClass =
-  "h-10 w-full rounded-md border border-input bg-background px-3 placeholder:text-muted-foreground";
+  "h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 py-1 text-base placeholder:text-muted-foreground aria-invalid:border-danger md:text-sm";
 
-export const labelClass = "font-medium text-sm";
+export const labelClass = "font-medium text-sm leading-none";
 
 export const cardClass =
-  "rounded-lg border bg-surface p-6 text-surface-foreground";
+  "rounded-xl border bg-surface p-6 text-sm text-surface-foreground";
+
+/** Card title (h2/h3 inside a card). */
+export const cardTitleClass = "font-semibold leading-none";

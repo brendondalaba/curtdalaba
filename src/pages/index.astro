@@ -95,7 +95,7 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
 
 <AppLayout title="Sermons" hasPlayer>
   <div class="flex flex-col gap-2">
-    <h1 class="font-semibold text-3xl tracking-tight">Sermons</h1>
+    <h1 class="font-semibold text-2xl tracking-tight">Sermons</h1>
     <p class="text-muted-foreground">
       {list.length === 1 ? "1 recording" : `${list.length} recordings`}
     </p>
@@ -167,7 +167,7 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
         class="mt-8 flex flex-col gap-3"
         data-sermon-section={section.id}
       >
-        <h2 id={`${section.id}-heading`} class="font-medium text-lg">
+        <h2 id={`${section.id}-heading`} class="font-semibold text-xl tracking-tight">
           {section.heading}
         </h2>
         <ul class="flex flex-col gap-3" data-sermon-list={section.id}>
@@ -184,7 +184,7 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
               data-state={section.id}
               data-search={sermon.search}
               data-year={sermon.year}
-              class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
+              class="group overflow-hidden rounded-xl border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
             >
               <div class="flex items-stretch">
                 <button
@@ -282,7 +282,7 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
   <p
     data-sermon-empty
     hidden={list.length > 0}
-    class="mt-6 rounded-lg border border-dashed p-8 text-center text-muted-foreground"
+    class="mt-6 rounded-xl border border-dashed p-8 text-sm text-center text-muted-foreground"
   >
     {
       list.length === 0 ? (
