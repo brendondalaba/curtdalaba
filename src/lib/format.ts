@@ -18,11 +18,25 @@ export function formatDuration(totalSeconds: number) {
 }
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "numeric",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+const LONG_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   dateStyle: "long",
   timeZone: "UTC",
 });
 
-/** "2026-11-15" → "November 15, 2026". Dates are stored without a time zone. */
+const toDate = (isoDate: string) => new Date(`${isoDate}T00:00:00Z`);
+
+/** "2026-11-15" → "11/15/2026". Dates are stored without a time zone. */
 export function formatSermonDate(isoDate: string) {
-  return DATE_FORMAT.format(new Date(`${isoDate}T00:00:00Z`));
+  return DATE_FORMAT.format(toDate(isoDate));
+}
+
+/** "2026-11-15" → "November 15, 2026", for search and screen readers. */
+export function formatLongSermonDate(isoDate: string) {
+  return LONG_DATE_FORMAT.format(toDate(isoDate));
 }
