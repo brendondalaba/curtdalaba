@@ -34,6 +34,7 @@ export type ProgressRow = {
   sermon_id: string;
   position_seconds: number;
   completed: 0 | 1;
+  favorite: 0 | 1;
   updated_at: string;
 };
 

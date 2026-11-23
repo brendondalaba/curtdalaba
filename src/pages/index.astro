@@ -19,7 +19,7 @@ try {
         order by preached_on desc, created_at desc`
     ),
     env.DB.prepare(
-      `select sermon_id, position_seconds, completed, updated_at from playback_progress
+      `select sermon_id, position_seconds, completed, favorite, updated_at from playback_progress
         where user_id = ?`
     ).bind(user?.id ?? ""),
   ]);
@@ -32,7 +32,7 @@ try {
 
 const progress = new Map(progressRows.map(row => [row.sermon_id, row]));
 
-const list = sermons.map(sermon => {
+const list = sermons.map((sermon, order) => {
   const saved = progress.get(sermon.id);
   const duration = sermon.duration_seconds ?? 0;
   const position = saved?.position_seconds ?? 0;
@@ -46,6 +46,8 @@ const list = sermons.map(sermon => {
   return {
     ...sermon,
     date,
+    order,
+    favorite: saved?.favorite === 1,
     listenedAt: saved?.updated_at ?? "",
     year: sermon.preached_on.slice(0, 4),
     duration,
@@ -72,17 +74,20 @@ const inProgress = list
 const unplayed = list.filter(
   sermon => !sermon.completed && sermon.position <= 0
 );
-const played = list.filter(sermon => sermon.completed);
+// Favorites first; otherwise newest first, as in the full list.
+const played = list
+  .filter(sermon => sermon.completed)
+  .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.order - b.order);
+// All three render (empty ones hidden) so rows can move between them live.
 const sections = [
   { id: "continue", heading: "Continue listening", sermons: inProgress },
   {
     id: "unplayed",
-    // A heading only helps when there's another section to tell it from.
-    heading: unplayed.length < list.length ? "Not yet played" : "",
+    heading: "Not yet played",
     sermons: unplayed,
   },
   { id: "played", heading: "Played", sermons: played },
-].filter(section => section.sermons.length > 0);
+];
 
 const years = [...new Set(list.map(sermon => sermon.year))];
 const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
@@ -157,36 +162,35 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
   {
     sections.map(section => (
       <section
-        aria-labelledby={section.heading ? `${section.id}-heading` : undefined}
+        aria-labelledby={`${section.id}-heading`}
+        hidden={section.sermons.length === 0}
         class="mt-8 flex flex-col gap-3"
-        data-sermon-section
+        data-sermon-section={section.id}
       >
-        {section.heading && (
-          <h2
-            id={`${section.id}-heading`}
-            class="font-medium text-lg"
-          >
-            {section.heading}
-          </h2>
-        )}
-        <ul class="flex flex-col gap-3" data-sermon-list>
-          {
-            section.sermons.map(sermon => (
-              <li
-                data-sermon-id={sermon.id}
-                data-title={sermon.title}
-                data-subtitle={sermon.subtitle}
-                data-duration={sermon.duration}
-                data-position={sermon.position}
-                data-completed={String(sermon.completed)}
-                data-search={sermon.search}
-                data-year={sermon.year}
-                class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
-              >
+        <h2 id={`${section.id}-heading`} class="font-medium text-lg">
+          {section.heading}
+        </h2>
+        <ul class="flex flex-col gap-3" data-sermon-list={section.id}>
+          {section.sermons.map(sermon => (
+            <li
+              data-sermon-id={sermon.id}
+              data-title={sermon.title}
+              data-subtitle={sermon.subtitle}
+              data-duration={sermon.duration}
+              data-position={sermon.position}
+              data-completed={String(sermon.completed)}
+              data-favorite={String(sermon.favorite)}
+              data-order={sermon.order}
+              data-state={section.id}
+              data-search={sermon.search}
+              data-year={sermon.year}
+              class="group overflow-hidden rounded-lg border bg-surface text-surface-foreground transition-colors duration-150 data-active:border-primary"
+            >
+              <div class="flex items-stretch">
                 <button
                   type="button"
                   data-play-sermon
-                  class="flex w-full items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
+                  class="flex min-w-0 flex-1 items-center gap-4 p-4 text-left transition-colors duration-150 hover:bg-accent/50"
                 >
                   <span class="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
                     <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true">
@@ -221,16 +225,55 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
                     </span>
                   </span>
                 </button>
-                <div class="h-1 bg-muted" aria-hidden="true">
-                  <div
-                    data-progress-bar
-                    class="h-full bg-primary"
-                    style={`width: ${sermon.fraction * 100}%`}
-                  />
-                </div>
-              </li>
-            ))
-          }
+                <button
+                  type="button"
+                  data-mark-played
+                  aria-label={`Mark "${sermon.title}" as played`}
+                  title="Mark as played"
+                  class="hidden w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground group-data-[state=continue]:inline-flex"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-5"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  data-favorite-toggle
+                  aria-label={`Favorite "${sermon.title}"`}
+                  aria-pressed={sermon.favorite ? "true" : "false"}
+                  title="Favorite"
+                  class="hidden w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-pressed:text-primary group-data-[state=played]:inline-flex"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-5 fill-none group-data-[favorite=true]:fill-current"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3.5Z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="h-1 bg-muted" aria-hidden="true">
+                <div
+                  data-progress-bar
+                  class="h-full bg-primary"
+                  style={`width: ${sermon.fraction * 100}%`}
+                />
+              </div>
+            </li>
+          ))}
         </ul>
       </section>
     ))
@@ -266,22 +309,33 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
 <script>
   const form = document.querySelector<HTMLFormElement>("[data-sermon-filter]");
   const empty = document.querySelector<HTMLElement>("[data-sermon-empty]");
-  const items = document.querySelectorAll<HTMLElement>(
-    "[data-sermon-list] > li"
-  );
+  const items = document.querySelectorAll<HTMLElement>("[data-sermon-id]");
   const sections = document.querySelectorAll<HTMLElement>(
     "[data-sermon-section]"
   );
+  const playedList = document.querySelector<HTMLElement>(
+    '[data-sermon-list="played"]'
+  );
+
+  /** Hides empty sections; "Not yet played" needs no heading when it's alone. */
+  function renderSections() {
+    let visible = 0;
+    for (const section of sections) {
+      section.hidden = !section.querySelector("li:not([hidden])");
+      if (!section.hidden) visible++;
+    }
+    const unplayedHeading = document.getElementById("unplayed-heading");
+    if (unplayedHeading) unplayedHeading.hidden = visible < 2;
+  }
 
   function applyFilter() {
-    if (!form || !empty) return;
-    const data = new FormData(form);
-    const words = String(data.get("q") ?? "")
+    let shown = 0;
+    const data = form ? new FormData(form) : null;
+    const words = String(data?.get("q") ?? "")
       .toLowerCase()
       .split(/\s+/)
       .filter(Boolean);
-    const year = String(data.get("year") ?? "");
-    let shown = 0;
+    const year = String(data?.get("year") ?? "");
     for (const item of items) {
       const haystack = item.dataset.search ?? "";
       const isMatch =
@@ -290,15 +344,68 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
       item.hidden = !isMatch;
       if (isMatch) shown++;
     }
-    for (const section of sections) {
-      section.hidden = !section.querySelector("li:not([hidden])");
-    }
-    empty.hidden = shown > 0;
+    renderSections();
+    if (empty && items.length > 0) empty.hidden = shown > 0;
   }
+
+  /** Favorites first, then the original (newest first) order. */
+  function placeInPlayed(item: HTMLElement) {
+    if (!playedList) return;
+    const rank = (row: HTMLElement) =>
+      (row.dataset.favorite === "true" ? 0 : 1e6) +
+      Number(row.dataset.order ?? 0);
+    const before = [
+      ...playedList.querySelectorAll<HTMLElement>("[data-sermon-id]"),
+    ].find(row => row !== item && rank(row) > rank(item));
+    playedList.insertBefore(item, before ?? null);
+  }
+
+  // Sent by the player when a sermon ends or is marked as played.
+  document.addEventListener("sermon:played", event => {
+    const id = (event as CustomEvent<string>).detail;
+    const item = document.querySelector<HTMLElement>(
+      `[data-sermon-id="${id}"]`
+    );
+    if (!item) return;
+    item.dataset.completed = "true";
+    item.dataset.position = "0";
+    item.dataset.state = "played";
+    const bar = item.querySelector<HTMLElement>("[data-progress-bar]");
+    const label = item.querySelector<HTMLElement>("[data-progress-label]");
+    if (bar) bar.style.width = "100%";
+    if (label) label.textContent = "Played";
+    placeInPlayed(item);
+    renderSections();
+  });
+
+  document.addEventListener("click", event => {
+    const button = (event.target as Element | null)?.closest<HTMLElement>(
+      "[data-favorite-toggle]"
+    );
+    const item = button?.closest<HTMLElement>("[data-sermon-id]");
+    if (!button || !item) return;
+    const favorite = item.dataset.favorite !== "true";
+    const apply = (value: boolean) => {
+      item.dataset.favorite = String(value);
+      button.setAttribute("aria-pressed", String(value));
+      placeInPlayed(item);
+    };
+    apply(favorite);
+    fetch("/api/favorite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sermonId: item.dataset.sermonId, favorite }),
+    })
+      .then(response => {
+        if (!response.ok) apply(!favorite);
+      })
+      .catch(() => apply(!favorite));
+  });
 
   form?.addEventListener("input", applyFilter);
   form?.addEventListener("submit", event => {
     event.preventDefault();
     applyFilter();
   });
+  renderSections();
 </script>
