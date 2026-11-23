@@ -303,10 +303,28 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
     }
   </p>
 
+  <div
+    data-undo-toast
+    role="status"
+    hidden
+    class="fixed inset-x-0 z-30 mx-auto w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-lg bg-foreground py-2 pr-2 pl-4 text-background text-sm shadow-lg [&:not([hidden])]:flex"
+  >
+    <span data-undo-message class="truncate"></span>
+    <button
+      type="button"
+      data-undo-button
+      class="inline-flex h-9 shrink-0 items-center rounded-md px-3 font-semibold transition-opacity duration-150 hover:opacity-80"
+    >
+      Undo
+    </button>
+  </div>
+
   <Player slot="after" />
 </AppLayout>
 
 <script>
+  import { formatDuration } from "@/lib/format";
+
   const form = document.querySelector<HTMLFormElement>("[data-sermon-filter]");
   const empty = document.querySelector<HTMLElement>("[data-sermon-empty]");
   const items = document.querySelectorAll<HTMLElement>("[data-sermon-id]");
@@ -316,6 +334,46 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
   const playedList = document.querySelector<HTMLElement>(
     '[data-sermon-list="played"]'
   );
+  const continueList = document.querySelector<HTMLElement>(
+    '[data-sermon-list="continue"]'
+  );
+  const toast = document.querySelector<HTMLElement>("[data-undo-toast]");
+  const toastMessage = toast?.querySelector<HTMLElement>("[data-undo-message]");
+  const undoButton = toast?.querySelector<HTMLElement>("[data-undo-button]");
+  const UNDO_MS = 6000;
+  let pendingUndo: (() => void) | null = null;
+  let toastTimer = 0;
+
+  function findItem(id: string) {
+    return document.querySelector<HTMLElement>(`[data-sermon-id="${id}"]`);
+  }
+
+  function hideToast() {
+    window.clearTimeout(toastTimer);
+    pendingUndo = null;
+    if (toast) toast.hidden = true;
+  }
+
+  function showUndo(title: string, undo: () => void) {
+    if (!toast || !toastMessage) return;
+    window.clearTimeout(toastTimer);
+    pendingUndo = undo;
+    toastMessage.textContent = `Marked “${title}” as played`;
+    // Sit just above the audio player when it's showing.
+    const player = document.getElementById("player");
+    const playerHeight = player && !player.hidden ? player.offsetHeight : 0;
+    toast.style.bottom = `calc(${playerHeight}px + 1rem + ${
+      playerHeight ? "0px" : "env(safe-area-inset-bottom)"
+    })`;
+    toast.hidden = false;
+    toastTimer = window.setTimeout(hideToast, UNDO_MS);
+  }
+
+  undoButton?.addEventListener("click", () => {
+    const undo = pendingUndo;
+    hideToast();
+    undo?.();
+  });
 
   /** Hides empty sections; "Not yet played" needs no heading when it's alone. */
   function renderSections() {
@@ -362,10 +420,10 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
 
   // Sent by the player when a sermon ends or is marked as played.
   document.addEventListener("sermon:played", event => {
-    const id = (event as CustomEvent<string>).detail;
-    const item = document.querySelector<HTMLElement>(
-      `[data-sermon-id="${id}"]`
-    );
+    const { id, undo } = (
+      event as CustomEvent<{ id: string; undo?: () => void }>
+    ).detail;
+    const item = findItem(id);
     if (!item) return;
     item.dataset.completed = "true";
     item.dataset.position = "0";
@@ -375,6 +433,34 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
     if (bar) bar.style.width = "100%";
     if (label) label.textContent = "Played";
     placeInPlayed(item);
+    renderSections();
+    if (undo) showUndo(item.dataset.title ?? "Sermon", undo);
+  });
+
+  // Undo puts the row back on top of Continue listening where it left off.
+  document.addEventListener("sermon:unplayed", event => {
+    const { id, position } = (
+      event as CustomEvent<{ id: string; position: number }>
+    ).detail;
+    const item = findItem(id);
+    if (!item || !continueList) return;
+    const duration = Number(item.dataset.duration) || 0;
+    item.dataset.completed = "false";
+    item.dataset.position = String(position);
+    item.dataset.state = "continue";
+    const bar = item.querySelector<HTMLElement>("[data-progress-bar]");
+    const label = item.querySelector<HTMLElement>("[data-progress-label]");
+    if (bar) {
+      const fraction = duration > 0 ? Math.min(1, position / duration) : 0;
+      bar.style.width = `${fraction * 100}%`;
+    }
+    if (label) {
+      label.textContent =
+        position > 0 && duration > 0
+          ? `${formatDuration(duration - position)} left`
+          : "";
+    }
+    continueList.insertBefore(item, continueList.firstChild);
     renderSections();
   });
 

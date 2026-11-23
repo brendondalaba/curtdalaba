@@ -271,14 +271,32 @@ export function initPlayer() {
     audio.currentTime = Number(seek.value);
   });
 
-  /** Lets the sermon list move the row into Played. */
-  function announcePlayed(id: string) {
-    document.dispatchEvent(new CustomEvent("sermon:played", { detail: id }));
+  /** Lets the sermon list move the row into Played (and offer undo). */
+  function announcePlayed(id: string, undo?: () => void) {
+    document.dispatchEvent(
+      new CustomEvent("sermon:played", { detail: { id, undo } })
+    );
+  }
+
+  function postProgress(id: string, position: number, completed: boolean) {
+    fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sermonId: id, position, completed }),
+      keepalive: true,
+    }).catch(() => {
+      // Offline: the row still moves; it returns on reload if unsaved.
+    });
   }
 
   function markPlayed(item: HTMLElement) {
     const id = item.dataset.sermonId ?? "";
-    if (track?.id === id) {
+    const isCurrent = track?.id === id;
+    const previous = isCurrent
+      ? audio.currentTime
+      : Number(item.dataset.position) || 0;
+
+    if (isCurrent) {
       if (!audio.paused) {
         isMarkingPlayed = true;
         audio.pause();
@@ -287,16 +305,22 @@ export function initPlayer() {
       audio.currentTime = 0;
       save({ completed: true });
     } else {
-      fetch("/api/progress", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sermonId: id, position: 0, completed: true }),
-        keepalive: true,
-      }).catch(() => {
-        // Offline: the row still moves; it returns on reload if unsaved.
-      });
+      postProgress(id, 0, true);
     }
-    announcePlayed(id);
+
+    announcePlayed(id, () => {
+      if (track?.id === id) {
+        audio.currentTime = previous;
+        track.position = previous;
+        track.completed = false;
+      }
+      postProgress(id, previous, false);
+      document.dispatchEvent(
+        new CustomEvent("sermon:unplayed", {
+          detail: { id, position: previous },
+        })
+      );
+    });
   }
 
   // Sermon list: tapping a row plays it, or toggles if it's already loaded.
