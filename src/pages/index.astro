@@ -4,7 +4,11 @@ import Alert from "@/components/Alert.astro";
 import Player from "@/components/Player.astro";
 import AppLayout from "@/layouts/AppLayout.astro";
 import type { ProgressRow, SermonListItem } from "@/lib/db";
-import { formatDuration, formatSermonDate } from "@/lib/format";
+import {
+  formatDuration,
+  formatLongSermonDate,
+  formatSermonDate,
+} from "@/lib/format";
 import { inputClass, labelClass } from "@/lib/ui";
 
 const { user, isAdmin } = Astro.locals;
@@ -38,6 +42,7 @@ const list = sermons.map((sermon, order) => {
   const position = saved?.position_seconds ?? 0;
   const completed = saved?.completed === 1;
   const date = formatSermonDate(sermon.preached_on);
+  const longDate = formatLongSermonDate(sermon.preached_on);
   const fraction = completed
     ? 1
     : duration > 0
@@ -60,7 +65,9 @@ const list = sermons.map((sermon, order) => {
       : position > 0 && duration > 0
         ? `${formatDuration(duration - position)} left`
         : "",
-    search: [sermon.title, sermon.scripture, date]
+    longDate,
+    // Both date styles, so "March" and "3/1" both match.
+    search: [sermon.title, sermon.scripture, date, longDate]
       .filter(Boolean)
       .join(" ")
       .toLowerCase(),
@@ -211,7 +218,9 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
                           <span aria-hidden="true"> · </span>
                         </>
                       )}
-                      <time datetime={sermon.preached_on}>{sermon.date}</time>
+                      <time datetime={sermon.preached_on} title={sermon.longDate}>
+                        {sermon.date}
+                      </time>
                       {sermon.duration > 0 && (
                         <span class="group-data-[state=continue]:hidden">
                           <span aria-hidden="true"> · </span>
