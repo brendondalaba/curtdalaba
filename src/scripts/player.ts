@@ -83,6 +83,21 @@ export function initPlayer() {
   const duration = () =>
     Number.isFinite(audio.duration) ? audio.duration : (track?.duration ?? 0);
 
+  /** Scrolls a cut-off title back and forth, unless motion is reduced. */
+  function updateMarquee() {
+    delete title.dataset.marquee;
+    const overflow = title.scrollWidth - title.clientWidth;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (overflow <= 1 || reduceMotion) return;
+    title.style.setProperty("--marquee-distance", `-${overflow}px`);
+    // ~30px a second while moving (60% of each pass), never rushed.
+    const seconds = Math.max(4, overflow / 30 / 0.6);
+    title.style.setProperty("--marquee-duration", `${seconds}s`);
+    title.dataset.marquee = "";
+  }
+
   function renderSpeed() {
     speed.textContent = `${rate}×`;
     speed.setAttribute("aria-label", `Playback speed: ${rate} times`);
@@ -192,6 +207,7 @@ export function initPlayer() {
     track = next;
     root.hidden = false;
     title.textContent = next.title;
+    updateMarquee();
     subtitle.textContent = next.subtitle;
     status.textContent = "";
 
@@ -423,6 +439,7 @@ export function initPlayer() {
       "--player-height",
       `${root.offsetHeight}px`
     );
+    updateMarquee();
   }).observe(root);
 
   // Bring back the last sermon (paused) so "continue listening" is one tap.
