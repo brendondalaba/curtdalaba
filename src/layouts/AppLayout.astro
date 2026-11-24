@@ -12,10 +12,10 @@ const { title, hasPlayer = false } = Astro.props;
 const { isAdmin } = Astro.locals;
 const path = Astro.url.pathname.replace(/\/$/, "") || "/";
 
-const links = [
+const links: { href: string; label: string; icon?: "account" }[] = [
   { href: "/", label: "Sermons" },
   ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
-  { href: "/account", label: "Account" },
+  { href: "/account", label: "Account", icon: "account" },
 ];
 ---
 
@@ -36,15 +36,36 @@ const links = [
       <nav aria-label="Main">
         <ul class="flex items-center sm:gap-1">
           {
-            
             links.map(link => (
               <li>
                 <a
                   href={link.href}
                   aria-current={path === link.href ? "page" : undefined}
-                  class="inline-flex h-9 items-center whitespace-nowrap rounded-md px-1.5 font-medium text-muted-foreground text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-[current=page]:text-foreground sm:px-3"
+                  aria-label={link.icon ? link.label : undefined}
+                  title={link.icon ? link.label : undefined}
+                  class:list={[
+                    "inline-flex h-9 items-center justify-center whitespace-nowrap rounded-md font-medium text-muted-foreground text-sm transition-colors duration-150 hover:bg-accent hover:text-accent-foreground aria-[current=page]:text-foreground",
+                    link.icon ? "w-9" : "px-1.5 sm:px-3",
+                  ]}
                 >
-                  {link.label}
+                  {link.icon === "account" ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      class="size-5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9.5" />
+                      <circle cx="12" cy="10" r="3" />
+                      <path d="M6.5 18.5a6.5 6.5 0 0 1 11 0" />
+                    </svg>
+                  ) : (
+                    link.label
+                  )}
                 </a>
               </li>
             ))
