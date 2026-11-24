@@ -12,7 +12,9 @@ const iconButton =
   <div class="mx-auto w-full max-w-3xl px-4 pt-2 pb-1.5 sm:px-6">
     <div class="flex items-center gap-1">
       <div class="mr-2 min-w-0 flex-1">
-        <p data-player-title class="truncate font-medium text-sm"></p>
+        <div class="overflow-hidden">
+          <p data-player-title class="truncate font-medium text-sm"></p>
+        </div>
         <p data-player-subtitle class="truncate text-muted-foreground text-xs">
         </p>
       </div>
@@ -129,6 +131,28 @@ const iconButton =
   <!-- biome-ignore lint/a11y/useMediaCaption: sermon recordings have no transcripts to caption with -->
   <audio data-player-audio preload="metadata"></audio>
 </section>
+
+<style>
+  /* Long titles glide to their end and back; see updateMarquee in player.ts. */
+  [data-player-title][data-marquee] {
+    width: max-content;
+    overflow: visible;
+    text-overflow: clip;
+    animation: player-marquee var(--marquee-duration) ease-in-out infinite
+      alternate;
+  }
+
+  @keyframes player-marquee {
+    0%,
+    20% {
+      transform: translateX(0);
+    }
+    80%,
+    100% {
+      transform: translateX(var(--marquee-distance));
+    }
+  }
+</style>
 
 <script>
   import { initPlayer } from "@/scripts/player";
