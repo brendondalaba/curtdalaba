@@ -417,6 +417,14 @@ export function initPlayer() {
 
   renderSpeed();
 
+  // Lets the page pad its bottom so the last row isn't hidden behind the player.
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty(
+      "--player-height",
+      `${root.offsetHeight}px`
+    );
+  }).observe(root);
+
   // Bring back the last sermon (paused) so "continue listening" is one tap.
   const lastId = readStorage(LAST_TRACK_KEY);
   const lastItem = isUuid(lastId)
