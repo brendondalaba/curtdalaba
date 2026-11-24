@@ -199,8 +199,22 @@ const passwordUpdated = Astro.url.searchParams.get("password") === "updated";
                 class="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pl-2 text-left"
               >
                 <span class="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-secondary text-secondary-foreground group-data-active:bg-primary group-data-active:text-primary-foreground">
-                  <svg viewBox="0 0 24 24" class="size-4" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-5 group-data-playing:hidden"
+                    aria-hidden="true"
+                  >
                     <path d="M8 5.5v13l10.5-6.5L8 5.5Z" fill="currentColor" />
+                  </svg>
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="hidden size-5 group-data-playing:block"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"
+                      fill="currentColor"
+                    />
                   </svg>
                   <span data-play-label class="sr-only">
                     Play

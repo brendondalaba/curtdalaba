@@ -127,6 +127,8 @@ export function initPlayer() {
     for (const item of items()) {
       const isCurrent = item.dataset.sermonId === track?.id;
       item.toggleAttribute("data-active", isCurrent);
+      // Shows the same play/pause icon as the player on this row.
+      item.toggleAttribute("data-playing", isCurrent && isPlaying);
       const button = item.querySelector("[data-play-label]");
       if (button) {
         button.textContent = isCurrent && isPlaying ? "Pause" : "Play";
